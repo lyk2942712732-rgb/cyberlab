@@ -46,8 +46,7 @@ async function submit() {
 <div class="eyebrow">YOUR NEXT CHAPTER</div>
 <h2>{{ registering ? '开启学习之旅' : '欢迎回到 CyberLab' }}</h2>
 <p class="muted">{{ registering ? '创建学生账号，开始学习与实验。' : '登录你的账号，继续探索安全世界。' }}</p>
-<form @submit.prevent="submit">
-<el-form label-position="top">
+<el-form :model="form" label-position="top" @submit.prevent="submit">
 <el-form-item label="用户名">
 <el-input v-model="form.username" minlength="3" maxlength="64" required autocomplete="username" placeholder="请输入用户名" size="large" />
 </el-form-item>
@@ -62,7 +61,6 @@ async function submit() {
 </el-form-item>
 <el-button class="full-width" type="primary" native-type="submit" size="large" :loading="busy">{{ registering ? '注册学生账号' : '登录工作台 →' }}</el-button>
 </el-form>
-</form>
 <p class="login-toggle">{{ registering ? '已有账号？' : '还没有账号？' }}<el-button link type="primary" @click="registering = !registering">{{ registering ? '返回登录' : '注册学生账号' }}</el-button>
 </p>
 <div class="login-hint">教师与管理员统一使用教学管理端账号登录。</div>
