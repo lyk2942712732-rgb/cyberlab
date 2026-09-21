@@ -1,0 +1,9 @@
+# Requires Docker Compose >=2.24.4 for !override.
+services:
+  nginx:
+    ports: !override
+      - '443:443'
+    volumes: !override
+      - ./nginx/nginx-tls.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/proxy-locations.conf:/etc/nginx/cyberlab/proxy-locations.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro

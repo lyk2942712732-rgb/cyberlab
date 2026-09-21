@@ -1,0 +1,31 @@
+import { test, expect } from '@playwright/test'
+
+test('学生可以登录、学习课时并查看实验与成绩', async ({ page }) => {
+  test.skip(!process.env.CYBERLAB_STUDENT_PASSWORD, '需要预先初始化的演示学生与课程')
+  await page.goto('/login')
+  await page.getByPlaceholder('请输入用户名').fill('student01')
+  await page.getByPlaceholder('至少 8 位密码').fill(process.env.CYBERLAB_STUDENT_PASSWORD!)
+  await page.getByRole('button', { name: '登录工作台' }).click()
+  await expect(page.getByRole('heading', { name: /你好/ })).toBeVisible()
+  await page.getByRole('navigation').getByRole('link', { name: '课程中心' }).click()
+  await page.getByRole('heading', { name: 'Web 安全基础' }).click()
+  await expect(page.getByRole('heading', { name: 'SQL 注入原理', exact: true })).toBeVisible()
+  const complete = page.getByRole('button', { name: '标记为已完成' })
+  if (await complete.isVisible()) await complete.click()
+  await expect(page.getByRole('button', { name: '已完成学习' })).toBeDisabled()
+  await page.getByRole('navigation').getByRole('link', { name: '我的成绩' }).click()
+  await expect(page.getByRole('heading', { name: '我的成绩' })).toBeVisible()
+})
+
+test('教学管理端展示镜像和实验配置入口', async ({ page }) => {
+  test.skip(!process.env.CYBERLAB_ADMIN_PASSWORD, '需要预先初始化的管理员账号')
+  await page.goto('/login')
+  await page.getByPlaceholder('请输入用户名').fill('admin')
+  await page.getByPlaceholder('至少 8 位密码').fill(process.env.CYBERLAB_ADMIN_PASSWORD!)
+  await page.getByRole('button', { name: '登录工作台' }).click()
+  await page.getByRole('navigation').getByRole('link', { name: '镜像管理' }).click()
+  await expect(page.getByRole('heading', { name: '导入靶机镜像' })).toBeVisible()
+  await page.getByRole('navigation').getByRole('link', { name: '实验管理' }).click()
+  await page.getByRole('button', { name: '新建实验' }).click()
+  await expect(page.getByText('靶机内部端口（明确填写，不对宿主机开放）')).toBeVisible()
+})

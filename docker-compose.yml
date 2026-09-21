@@ -1,0 +1,113 @@
+name: cyberlab
+
+x-app: &app
+  build: ./backend
+  image: cyberlab/backend:local
+  restart: unless-stopped
+  environment: &app-env
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-cyberlab}:${POSTGRES_PASSWORD:?Generate .env first}@postgres:5432/${POSTGRES_DB:-cyberlab}
+    REDIS_URL: redis://redis:6379/0
+    SECRET_KEY: ${SECRET_KEY:?Generate .env first}
+    ORCHESTRATOR_SECRET: ${ORCHESTRATOR_SECRET:?Generate .env first}
+    ORCHESTRATOR_URL: ws://orchestrator:8081
+    PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
+    UPLOAD_DIR: /var/lib/cyberlab/uploads/target-images
+    MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-1024}
+    MAX_ACTIVE_SESSIONS: ${MAX_ACTIVE_SESSIONS:-20}
+    KALI_IMAGE: ${KALI_IMAGE:-cyberlab/kali:local}
+    KALI_CPU: ${KALI_CPU:-2}
+    KALI_MEMORY_MB: ${KALI_MEMORY_MB:-2048}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cyberlab}
+      POSTGRES_DB: ${POSTGRES_DB:-cyberlab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate .env first}
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    networks: [database-net]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: [redis-server, --appendonly, 'yes', --maxmemory, 256mb, --maxmemory-policy, noeviction]
+    volumes: [redis-data:/data]
+    networks: [database-net]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    <<: *app
+    restart: 'no'
+    command: [alembic, upgrade, head]
+    networks: [database-net]
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  backend:
+    <<: *app
+    environment:
+      <<: *app-env
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Generate .env first}
+      STUDENT_PASSWORD: ${STUDENT_PASSWORD:?Generate .env first}
+    volumes: ["${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/uploads/target-images:/var/lib/cyberlab/uploads/target-images"]
+    networks: [platform-net, database-net, lab-control-net]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  orchestrator:
+    <<: *app
+    user: '0:0'
+    command: [uvicorn, app.orchestrator.server:app, --host, 0.0.0.0, --port, '8081', --ws-max-size, '16777216']
+    volumes:
+      - ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/uploads/target-images:/var/lib/cyberlab/uploads/target-images
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [database-net, lab-control-net]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8081/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    networks: [platform-net]
+
+  nginx:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    ports: ["127.0.0.1:${HTTP_PORT:-8080}:80"]
+    volumes: [./nginx/nginx.conf:/etc/nginx/nginx.conf:ro]
+    networks: [platform-net]
+    depends_on:
+      backend: {condition: service_healthy}
+      frontend: {condition: service_started}
+
+networks:
+  platform-net: {}
+  database-net: {internal: true}
+  lab-control-net: {internal: true}
+
+volumes:
+  postgres-data: {}
+  redis-data: {}

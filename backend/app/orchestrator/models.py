@@ -1,0 +1,39 @@
+from dataclasses import dataclass, field
+
+
+@dataclass
+class ContainerSpec:
+    name: str
+    image: str
+    network_id: str
+    instance_type: str
+    session_id: str
+    cpu: float
+    memory_mb: int
+    environment: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class ContainerInfo:
+    id: str
+    name: str
+    ip_address: str
+    status: str
+    healthy: bool
+
+
+@dataclass
+class ImageInfo:
+    id: str
+    repository: str
+    tag: str
+    size: int
+    repo_digest: str | None = None
+
+
+class RuntimeFailure(Exception):
+    """A runtime error safe for display, without daemon credentials/host paths."""
+
+
+class ImageInUse(RuntimeFailure):
+    """An image cannot be removed while containers still reference it."""
