@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import RFB from '@novnc/novnc/core/rfb'
+import RFB from '@novnc/novnc'
 import { post } from '../../api/http'
 const route = useRoute(), screen = ref<HTMLDivElement>(), status = ref('正在连接桌面…'), connected = ref(false), connecting = ref(false)
 let rfb: RFB | undefined, ws: WebSocket | undefined, disposed = false, handshakeTimer: ReturnType<typeof setTimeout> | undefined
