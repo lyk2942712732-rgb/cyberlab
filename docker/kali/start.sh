@@ -13,17 +13,7 @@ trap cleanup EXIT INT TERM
 # Docker exec transport; no VNC/noVNC port is published on the host/network.
 Xtigervnc :1 -geometry 1440x900 -depth 24 -localhost yes -SecurityTypes None -rfbport 5901 &
 vnc_pid=$!
-python3 - <<'PY'
-import socket, time
-for _ in range(100):
-    try:
-        with socket.create_connection(('127.0.0.1', 5901), 1):
-            break
-    except OSError:
-        time.sleep(.1)
-else:
-    raise SystemExit('VNC did not start')
-PY
+python3 /usr/local/bin/check-desktop.py --wait
 dbus-run-session -- xfce4-session &
 xfce_pid=$!
 websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5901 &

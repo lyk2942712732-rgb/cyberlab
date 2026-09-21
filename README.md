@@ -4,7 +4,7 @@
 
 学生可以学习 Markdown 理论课、启动独立 Kali 图形桌面与靶机、提交 Flag 和查看成绩。教学管理端负责课程、章节、课时、实验模板、成品镜像上传、学生成绩与运行实例。
 
-**交付状态：本项目包含实现代码、测试代码和部署说明。按本次要求，没有在当前 Windows 电脑上部署项目或执行测试；下列命令供后续 Linux 环境使用，不能视为已经通过的验证结果。**
+项目已部署到 Ubuntu 虚拟机。最近一次桌面连接修复的实测结果见 [验收记录](docs/ACCEPTANCE.md)；开发命令和通用验收清单不代表所有场景均已验证。
 
 ## 1. 架构与边界
 
@@ -247,7 +247,7 @@ docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
 
 该配置用 443 替换默认 HTTP 发布端口，并启用 TLS 1.2/1.3。证书目录已忽略版本控制；证书由部署方签发和续期。后续管理命令使用同一组 Compose 文件。
 
-## 10. 开发与测试命令（未在本次执行）
+## 10. 开发与测试命令
 
 后端单元/API 测试不需要 Docker、PostgreSQL 或 Redis，使用隔离 SQLite 和 FakeRuntime；FakeRuntime 仅存在于测试目录，生产没有模拟桌面或伪造运行成功的开关。
 
@@ -281,6 +281,14 @@ npm run test:e2e
 ```
 
 测试覆盖启动、重复启动、多学生资源分离、停止、重置、TTL、创建失败、镜像缺失、异常退出、崩溃恢复、Flag 正误及成绩不回退、越权阻断、上传校验与清理、镜像引用保护、容器安全参数和桌面票据范围。实际 Docker 网络、Kali 图形桌面、PostgreSQL 并发锁与完整 Linux 链路仍须按 [验收清单](docs/ACCEPTANCE.md) 实测。
+
+Kali 健康检查的协议回归测试（在仓库根目录执行，无需 Docker）：
+
+```bash
+python3 -m unittest discover -s docker/kali -p 'test_*.py'
+```
+
+健康检查必须完成 VNC 3.8 握手，并设置共享连接；仅连接端口或读取 `RFB` 开头就断开会触发 TigerVNC 失败计数，导致后续桌面连接被拉黑。修改 Kali 镜像后，需要重新启动实验才能使用新镜像。演示靶机健康检查预留 10 秒，避免资源有限的虚拟机因 Python 启动耗时被误判。
 
 ## 11. 运维与限制
 

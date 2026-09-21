@@ -13,6 +13,7 @@ async function connect() {
     const { ticket } = await post<{ ticket: string }>(`/lab-sessions/${route.params.id}/desktop-ticket`)
     if (disposed) return
     const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/lab-sessions/${route.params.id}/desktop`)
+    socket.binaryType = 'arraybuffer'
     ws = socket
     handshakeTimer = setTimeout(() => { socket.close(); connecting.value = false; status.value = '连接超时，请重试。' }, 20000)
     socket.onopen = () => socket.send(JSON.stringify({ ticket }))
