@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { House, Reading, Monitor, Trophy, Collection, Box, User, SwitchButton, ArrowRight } from '@element-plus/icons-vue'
+import { House, Reading, Monitor, Trophy, Collection, Box, User, SwitchButton, ArrowRight, Fold, Expand } from '@element-plus/icons-vue'
 import { useAuth } from '../stores/auth'
 const auth = useAuth(), route = useRoute(), router = useRouter()
+const collapsed = ref(localStorage.getItem('cyberlab-sidebar-collapsed') === 'true' || (localStorage.getItem('cyberlab-sidebar-collapsed') === null && window.innerWidth <= 950))
+watch(collapsed, value => localStorage.setItem('cyberlab-sidebar-collapsed', String(value)))
 const isAdmin = computed(() => auth.user?.role === 'ADMIN')
 const menu = computed(() => isAdmin.value ? [
   { path: '/', label: '首页', icon: House }, { path: '/admin/courses', label: '课程管理', icon: Reading },
@@ -13,7 +15,7 @@ const menu = computed(() => isAdmin.value ? [
 function logout() { auth.logout(); router.push('/login') }
 </script>
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'sidebar-collapsed': collapsed }">
     <aside class="sidebar">
       <router-link to="/" class="brand">
 <span class="brand-mark">C<span>_</span>
@@ -21,13 +23,16 @@ function logout() { auth.logout(); router.push('/login') }
 <div>CyberLab<small>网络安全教育实验室</small>
 </div>
 </router-link>
+      <button class="sidebar-toggle" :aria-label="collapsed ? '展开侧栏' : '收起侧栏'" :title="collapsed ? '展开侧栏' : '收起侧栏'" :aria-expanded="!collapsed" @click="collapsed = !collapsed">
+        <el-icon><Expand v-if="collapsed"/><Fold v-else/></el-icon><span v-if="!collapsed">收起侧栏</span>
+      </button>
       <div class="workspace-label">{{ isAdmin ? '教学管理端' : '学生学习空间' }} <span>MVP</span>
 </div>
       <nav>
-<router-link v-for="item in menu" :key="item.path" :to="item.path" :class="{ selected: item.path === '/' ? route.path === '/' : route.path.startsWith(item.path) }">
+<router-link v-for="item in menu" :key="item.path" :to="item.path" :title="item.label" :aria-label="item.label" :class="{ selected: item.path === '/' ? route.path === '/' : route.path.startsWith(item.path) }">
 <el-icon>
 <component :is="item.icon" />
-</el-icon>{{ item.label }}<el-icon class="nav-arrow">
+</el-icon><span class="nav-label">{{ item.label }}</span><el-icon class="nav-arrow">
 <ArrowRight />
 </el-icon>
 </router-link>

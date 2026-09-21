@@ -6,5 +6,8 @@ declare module '@novnc/novnc' {
     viewOnly: boolean
     disconnect(): void
     sendCtrlAltDel(): void
+    clipboardPasteFrom(text: string): void
+    sendKey(keysym: number, code: string, down?: boolean): void
+    focus(): void
   }
 }

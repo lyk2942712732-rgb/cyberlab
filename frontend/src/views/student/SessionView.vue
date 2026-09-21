@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { get, post } from '../../api/http'
@@ -8,6 +8,12 @@ import StatusTag from '../../components/StatusTag.vue'
 import MarkdownContent from '../../components/MarkdownContent.vue'
 const route = useRoute(), session = ref<LabSession>(), lab = ref<Lab>(), flag = ref(''), busy = ref(false), now = ref(Date.now()), desktopKey = ref(0)
 let timer: ReturnType<typeof setInterval> | undefined, poll: ReturnType<typeof setTimeout> | undefined, disposed = false
+const expanded = ref(false)
+let previousOverflow = ''
+watch(expanded, value => {
+  if (value) { previousOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden' }
+  else document.body.style.overflow = previousOverflow
+})
 const remaining = computed(() => { if (['DESTROYED', 'FAILED', 'FINISHED'].includes(session.value?.status || '')) return '00:00:00'; const total = Math.max(0, Math.floor((new Date(session.value?.expires_at || 0).getTime() - now.value) / 1000)); return [Math.floor(total / 3600), Math.floor(total / 60) % 60, total % 60].map(n => String(n).padStart(2, '0')).join(':') })
 const canUse = computed(() => session.value?.status === 'READY' && remaining.value !== '00:00:00')
 async function refresh() {
@@ -25,7 +31,7 @@ async function submit() {
   try { const result = await post<{correct: boolean; score: number}>(`/lab-sessions/${route.params.id}/submit`, { flag: flag.value }); if (result.correct) { ElMessage.success('回答正确！100 分已记录'); flag.value = '' } else ElMessage.warning('Flag 不正确，再检查一下实验结果。') } catch {} finally { busy.value = false }
 }
 onMounted(() => { refresh(); timer = setInterval(() => { now.value = Date.now() }, 1000) })
-onBeforeUnmount(() => { disposed = true; clearInterval(timer); clearTimeout(poll) })
+onBeforeUnmount(() => { disposed = true; clearInterval(timer); clearTimeout(poll); if (expanded.value) document.body.style.overflow = previousOverflow })
 </script>
 <template>
 <div>
@@ -57,11 +63,14 @@ onBeforeUnmount(() => { disposed = true; clearInterval(timer); clearTimeout(poll
 <h3>操作指引</h3>
 <MarkdownContent :content="lab?.steps"/>
 </aside>
-<section class="desktop-panel">
+<section class="desktop-panel" :class="{ 'desktop-panel-expanded': expanded }">
 <header>
 <div>
-<span class="status-dot"/>Kali Desktop</div>
+<span class="status-dot"/>Kali Desktop<span v-if="expanded" class="desktop-remaining">剩余 {{ remaining }}</span></div>
+<div class="desktop-header-actions">
 <a v-if="canUse" :href="`/desktop/${session?.id}`" target="_blank" rel="noopener">在新窗口打开 ↗</a>
+<el-button size="small" :aria-pressed="expanded" @click="expanded = !expanded">{{ expanded ? '退出全屏' : '全屏' }}</el-button>
+</div>
 </header>
 <iframe v-if="canUse" :key="desktopKey" :src="`/desktop/${session?.id}`" title="Kali 在线实验桌面" allow="clipboard-read; clipboard-write"/>
 <div v-else class="desktop-placeholder">
