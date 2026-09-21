@@ -102,11 +102,21 @@ class LabOrchestrator:
             try:
                 if len(instances) != 2:
                     raise RuntimeFailure("实验实例数据不完整")
+                unhealthy = []
                 for instance in instances:
                     state = self.runtime.inspect_container(instance.runtime_id)
                     instance.status = state.status
+                    # Docker healthchecks can briefly report `starting` or
+                    # `unhealthy` while the process is still running. Keep the
+                    # session usable and let the next reconciliation observe it
+                    # again; only a stopped container is terminal.
+                    if state.status in ("exited", "dead"):
+                        raise RuntimeFailure("实验容器已退出，资源已安排回收")
                     if not state.healthy:
-                        raise RuntimeFailure("实验容器健康检查失败")
+                        unhealthy.append(instance.container_name)
+                if unhealthy:
+                    log.warning("Container healthcheck pending session=%s containers=%s", session.id, unhealthy)
+                    return
             except Exception:
                 session.error = "实验容器异常退出，资源已安排回收"
                 self.stop(db, session)
