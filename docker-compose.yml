@@ -17,6 +17,7 @@ x-app: &app
     KALI_IMAGE: ${KALI_IMAGE:-cyberlab/kali:local}
     KALI_CPU: ${KALI_CPU:-2}
     KALI_MEMORY_MB: ${KALI_MEMORY_MB:-2048}
+    HEALTH_TIMEOUT: ${HEALTH_TIMEOUT:-90}
 
 services:
   postgres:
