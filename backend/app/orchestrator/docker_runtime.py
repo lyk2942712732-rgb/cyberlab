@@ -107,7 +107,9 @@ class DockerRuntime:
             labels={**MANAGED, SESSION_LABEL: spec.session_id, "cyberlab.type": spec.instance_type},
             environment=spec.environment, detach=True, init=True,
             nano_cpus=int(spec.cpu * 1_000_000_000), mem_limit=f"{spec.memory_mb}m",
-            memswap_limit=f"{spec.memory_mb}m", pids_limit=256,
+            # Firefox uses many threads, all counted by the pids cgroup.
+            # Keep a bounded desktop allowance separate from small targets.
+            memswap_limit=f"{spec.memory_mb}m", pids_limit=512 if spec.instance_type == "KALI" else 256,
             cap_drop=["ALL"], cap_add=["NET_RAW"] if spec.instance_type == "KALI" else [],
             security_opt=["no-new-privileges:true"], privileged=False,
             dns=["127.0.0.1"], shm_size="256m", restart_policy={"Name": "no"},

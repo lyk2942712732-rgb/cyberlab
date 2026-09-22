@@ -20,6 +20,9 @@ RUN chmod 755 /usr/local/bin/start-desktop \
 USER student
 WORKDIR /home/student
 ENV DISPLAY=:1 HOME=/home/student
+# VNC has no GPU; skip Firefox's unsupported hardware probe without disabling
+# Firefox's content sandbox or the container's security restrictions.
+ENV MOZ_AVOID_OPENGL_ALTOGETHER=1
 HEALTHCHECK --interval=5s --timeout=10s --start-period=15s --retries=10 \
     CMD python3 /usr/local/bin/check-desktop.py
 ENTRYPOINT ["/usr/local/bin/start-desktop"]

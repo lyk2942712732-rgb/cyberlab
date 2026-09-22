@@ -296,6 +296,8 @@ python3 -m unittest discover -s docker/kali -p 'test_*.py'
 
 Kali 健康检查还必须确认 X11 窗口管理器已注册，且桌面和任务栏窗口都已出现，避免 VNC 已启动、XFCE 尚未加载时提前显示“就绪”。启动脚本的 `--wait` 只检查 VNC，以便随后启动 XFCE。容器默认关闭 XFWM 合成特效及 X Server 闲置屏保，并使用系统 Default 主题自带的 XPM 素材构建 CyberLab 窗框主题，减少启动时逐个解码 PNG 的开销。若启动仍慢，检查宿主机 `uptime`、`vmstat 1` 和 `docker stats --no-stream`；CPU 满载、后台更新及交换内存都会影响桌面启动，健康检查不能消除宿主机资源竞争。
 
+Kali 的进程/线程总数上限为 512，靶机保持 256；Linux 的 PIDs 限制也计算线程，Firefox 启动可能触及过低的上限并留下无响应的进程。可通过容器内 `/sys/fs/cgroup/pids.events` 的 `max` 计数检查是否触限。Kali 默认建议 `KALI_CPU=2`，不会独占两个核心；无 GPU 的 VNC 环境通过 `MOZ_AVOID_OPENGL_ALTOGETHER=1` 跳过 Firefox 的 OpenGL 硬件探测，保留浏览器及容器的沙箱限制。
+
 ## 11. 运维与限制
 
 ```bash

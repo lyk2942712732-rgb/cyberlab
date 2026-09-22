@@ -25,7 +25,8 @@ def test_container_policy_cannot_be_overridden_by_image(kind):
     assert options["image"] == "sha256:fixed"
     assert options["network"] == "isolated-net" and options["privileged"] is False
     assert options["nano_cpus"] == 1_250_000_000 and options["mem_limit"] == "512m"
-    assert options["pids_limit"] == 256 and options["cap_drop"] == ["ALL"]
+    assert options["pids_limit"] == (512 if kind == "KALI" else 256)
+    assert options["cap_drop"] == ["ALL"]
     assert options["security_opt"] == ["no-new-privileges:true"]
     assert not any(key in options for key in ("volumes", "mounts", "ports", "devices", "network_mode"))
 
