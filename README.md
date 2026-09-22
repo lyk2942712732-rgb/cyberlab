@@ -294,6 +294,8 @@ python3 -m unittest discover -s docker/kali -p 'test_*.py'
 
 健康检查必须完成 VNC 3.8 握手，并设置共享连接；仅连接端口或读取 `RFB` 开头就断开会触发 TigerVNC 失败计数，导致后续桌面连接被拉黑。修改 Kali 镜像后，需要重新启动实验才能使用新镜像。演示靶机使用 BusyBox wget 检查 HTTP 健康端点，预留 10 秒，避免反复启动 Python、加载 urllib 带来的额外开销。
 
+Kali 健康检查还必须确认 X11 窗口管理器已注册，且桌面和任务栏窗口都已出现，避免 VNC 已启动、XFCE 尚未加载时提前显示“就绪”。启动脚本的 `--wait` 只检查 VNC，以便随后启动 XFCE。容器默认关闭 XFWM 合成特效及 X Server 闲置屏保，并使用系统 Default 主题自带的 XPM 素材构建 CyberLab 窗框主题，减少启动时逐个解码 PNG 的开销。若启动仍慢，检查宿主机 `uptime`、`vmstat 1` 和 `docker stats --no-stream`；CPU 满载、后台更新及交换内存都会影响桌面启动，健康检查不能消除宿主机资源竞争。
+
 ## 11. 运维与限制
 
 ```bash

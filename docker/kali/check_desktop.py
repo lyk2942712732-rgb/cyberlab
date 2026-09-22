@@ -3,6 +3,7 @@ import socket
 import struct
 import time
 import sys
+from check_x11 import check_shell_ready
 
 
 def receive(sock, length):
@@ -39,6 +40,10 @@ if __name__ == "__main__":
     for attempt in range(attempts):
         try:
             check_desktop()
+            # The entrypoint only waits for X/VNC before launching XFCE.
+            # Docker health must additionally wait for the usable desktop.
+            if "--wait" not in sys.argv:
+                check_shell_ready()
             break
         except OSError:
             if attempt == attempts - 1:

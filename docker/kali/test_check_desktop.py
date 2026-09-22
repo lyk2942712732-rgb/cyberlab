@@ -5,9 +5,18 @@ from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 from check_desktop import check_desktop, receive
+from check_x11 import require_shell_windows
 
 
 class DesktopHealthTests(unittest.TestCase):
+    def test_vnc_without_desktop_windows_is_not_ready(self):
+        for types in (set(), {1}, {2}, {3}):
+            with self.subTest(types=types), self.assertRaises(OSError):
+                require_shell_windows(types, desktop=1, panel=2)
+
+    def test_desktop_and_panel_are_both_required(self):
+        require_shell_windows({1, 2, 3}, desktop=1, panel=2)
+
     def test_probe_completes_shared_handshake_with_fragmented_server_messages(self):
         client, server = socket.socketpair()
         client.settimeout(2)

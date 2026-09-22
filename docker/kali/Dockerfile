@@ -12,7 +12,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && chown -R student:student /home/student
 COPY start.sh /usr/local/bin/start-desktop
 COPY check_desktop.py /usr/local/bin/check-desktop.py
-RUN chmod 755 /usr/local/bin/start-desktop
+COPY check_x11.py /usr/local/bin/check_x11.py
+COPY --chown=student:student xfwm4.xml /home/student/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
+RUN chmod 755 /usr/local/bin/start-desktop \
+    && mkdir -p /usr/share/themes/CyberLab/xfwm4 \
+    && cp /usr/share/themes/Default/xfwm4/*.xpm /usr/share/themes/Default/xfwm4/themerc /usr/share/themes/CyberLab/xfwm4/
 USER student
 WORKDIR /home/student
 ENV DISPLAY=:1 HOME=/home/student
