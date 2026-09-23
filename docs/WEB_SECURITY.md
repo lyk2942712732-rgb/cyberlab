@@ -81,4 +81,4 @@ CYBERLAB_E2E_URL=http://127.0.0.1:4173 npx playwright test e2e/resources.spec.ts
 - 新 SQL 实验验证 Kali 到靶机的真实请求、错误与正确 Flag 判题、两次真实 Docker 资源采样，以及结束后容器、网络清理和监控已回收状态。
 - Kali 配置仍为 2 核额度、1536 MiB、512 个进程/线程。TGA、其数据库与 Ubuntu 图形桌面服务保持运行。
 
-部署前数据库快照保存于服务器 `.deploy/before-web2025.sql`；旧平台镜像保留为 `cyberlab/backend:before-web2025` 和 `cyberlab-frontend:before-web2025`。课程内容和镜像已经导入，回退前端/后端镜像不会自动删除新增教学数据。
+部署前数据库快照保存于服务器 `.deploy/before-web2025.sql`。2026-09-23 经用户要求清理，旧前后端回退镜像、旧 Kali 版本、SQL 靶机 v1/v2 和临时 Node 构建镜像已删除；旧 SQL 镜像通过管理接口同步删除了目录记录，已完成的旧迁移容器一并清理。当前前后端、Kali 与 13 个已关联实验的靶机镜像均保留，服务健康检查通过。旧镜像标签已不能直接用于回退；数据库快照仍保留。
