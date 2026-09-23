@@ -317,6 +317,7 @@ docker compose ps
 接口细节见 [API 文档](docs/API.md)，实现及安全边界见 [架构说明](docs/ARCHITECTURE.md)。
 
 实现参考：[Docker 内部桥接网络](https://docs.docker.com/engine/network/drivers/bridge/)、[Docker SDK 镜像 API](https://docker-py.readthedocs.io/en/stable/images.html)、[Docker SDK Exec API](https://docker-py.readthedocs.io/en/stable/api.html)、[noVNC](https://github.com/novnc/noVNC)、[FastAPI 鉴权](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/)。
-# Web 安全课程扩展
+
+## Web 安全课程扩展
 
 新增 4 门课程、12 个独立实验（OWASP Top 10:2025 十类风险及 XSS、SSRF 专项），并提供实验页可折叠的 Kali / 靶机资源与健康监控。构建、管理员 tar 导入、幂等初始化和指标说明见 [Web 安全课程包](docs/WEB_SECURITY.md)。
