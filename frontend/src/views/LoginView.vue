@@ -22,7 +22,7 @@ async function submit() {
 </span>CyberLab</div>
 <div class="login-story-copy">
 <div class="eyebrow light">LEARN. EXPLORE. SECURE.</div>
-<h1>让安全知识，<br/>在实践中发生。</h1>
+<h1>让安全知识，<br/>在<em>实践</em>中发生。</h1>
 <p>连接理论与真实环境的网络安全学习空间。<br/>从第一行命令开始，构建你的安全能力。</p>
 <div class="terminal-art">
 <div class="terminal-bar">

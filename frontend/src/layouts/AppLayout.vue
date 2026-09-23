@@ -26,10 +26,10 @@ function logout() { auth.logout(); router.push('/login') }
       <button class="sidebar-toggle" :aria-label="collapsed ? '展开侧栏' : '收起侧栏'" :title="collapsed ? '展开侧栏' : '收起侧栏'" :aria-expanded="!collapsed" @click="collapsed = !collapsed">
         <el-icon><Expand v-if="collapsed"/><Fold v-else/></el-icon><span v-if="!collapsed">收起侧栏</span>
       </button>
-      <div class="workspace-label">{{ isAdmin ? '教学管理端' : '学生学习空间' }} <span>MVP</span>
+      <div class="workspace-label">{{ isAdmin ? '教学管理端' : '学生学习空间' }} <span>{{ isAdmin ? 'ADMIN' : 'LEARN' }}</span>
 </div>
       <nav>
-<router-link v-for="item in menu" :key="item.path" :to="item.path" :title="item.label" :aria-label="item.label" :class="{ selected: item.path === '/' ? route.path === '/' : route.path.startsWith(item.path) }">
+<router-link v-for="item in menu" :key="item.path" :to="item.path" :title="item.label" :aria-label="item.label" :aria-current="(item.path === '/' ? route.path === '/' : route.path.startsWith(item.path)) ? 'page' : undefined" :class="{ selected: item.path === '/' ? route.path === '/' : route.path.startsWith(item.path) }">
 <el-icon>
 <component :is="item.icon" />
 </el-icon><span class="nav-label">{{ item.label }}</span><el-icon class="nav-arrow">
@@ -38,6 +38,10 @@ function logout() { auth.logout(); router.push('/login') }
 </router-link>
 </nav>
       <div class="sidebar-bottom">
+<div class="sidebar-note">
+<div class="eyebrow">LEARN BY DOING</div>
+<p>理解每一个原理，<br/>验证每一种可能。</p>
+</div>
 <div class="safe-note">
 <span class="status-dot" />在独立环境中探索安全</div>
 <div class="user-block">
