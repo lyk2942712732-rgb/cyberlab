@@ -5,6 +5,7 @@ from app.models import LabSession
 from app.schemas.inputs import FlagInput
 from app.services.sessions import SessionService
 from app.services.scores import ScoreService
+from app.orchestrator.client import OrchestratorClient
 
 router = APIRouter(tags=["Sessions"])
 
@@ -31,6 +32,13 @@ def session(identifier: str, db: DB, user: CurrentUser):
 def reset(identifier: str, db: DB, user: CurrentUser):
     limit(f"reset:{user.id}", 6, 60)
     return {"data": SessionService(db).command(identifier, user, "reset")}
+
+
+@router.get("/lab-sessions/{identifier}/metrics")
+def metrics(identifier: str, db: DB, user: CurrentUser):
+    SessionService(db).owned(identifier, user)
+    limit(f"metrics:{user.id}", 30, 60)
+    return {"data": OrchestratorClient().session_metrics(identifier)}
 
 
 @router.post("/lab-sessions/{identifier}/stop", status_code=202)

@@ -6,6 +6,7 @@ import { get, post } from '../../api/http'
 import type { Lab, LabSession } from '../../types'
 import StatusTag from '../../components/StatusTag.vue'
 import MarkdownContent from '../../components/MarkdownContent.vue'
+import ResourcePanel from '../../components/ResourcePanel.vue'
 const route = useRoute(), session = ref<LabSession>(), lab = ref<Lab>(), flag = ref(''), busy = ref(false), now = ref(Date.now()), desktopKey = ref(0)
 let timer: ReturnType<typeof setInterval> | undefined, poll: ReturnType<typeof setTimeout> | undefined, disposed = false
 const expanded = ref(false)
@@ -50,6 +51,7 @@ onBeforeUnmount(() => { disposed = true; clearInterval(timer); clearTimeout(poll
 </div>
 </div>
 <el-alert v-if="session?.error" :title="session.error" type="error" :closable="false" show-icon class="margin-bottom"/>
+<ResourcePanel v-if="session" :session-id="session.id" :status="session.status" :instance-key="session.instances.map(i => i.runtime_id).join(',')"/>
 <div class="experiment-layout">
 <aside class="panel experiment-guide">
 <div class="eyebrow">EXPERIMENT GUIDE</div>

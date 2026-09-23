@@ -6,6 +6,16 @@ from app.core.config import settings
 class OrchestratorClient:
     """Platform-side transport: the backend never imports or calls Docker SDK."""
 
+    def session_metrics(self, identifier: str) -> dict:
+        base = settings().orchestrator_url.replace("ws://", "http://").replace("wss://", "https://")
+        try:
+            response = httpx.get(f"{base}/internal/sessions/{identifier}/metrics",
+                                 headers={"Authorization": f"Bearer {settings().orchestrator_secret}"}, timeout=15)
+            response.raise_for_status()
+            return response.json()["data"]
+        except (httpx.HTTPError, ValueError, KeyError):
+            raise HTTPException(503, "资源监控暂时不可用，实验可以继续") from None
+
     def delete_image(self, identifier: str) -> dict:
         base = settings().orchestrator_url.replace("ws://", "http://").replace("wss://", "https://")
         try:

@@ -73,8 +73,16 @@ class DockerConsole:
 
 
 class DockerRuntime:
-    def __init__(self, client=None):
-        self.client = client or docker.from_env(timeout=120)
+    def __init__(self, client=None, timeout=120):
+        self.client = client or docker.from_env(timeout=timeout)
+
+    def resource_snapshot(self, container_id: str, session_id: str) -> tuple[dict, dict]:
+        obj = self._container(container_id)
+        if obj.labels.get(SESSION_LABEL) != session_id:
+            raise RuntimeFailure("实例不属于当前实验")
+        attrs = obj.attrs
+        stats = obj.stats(stream=False, one_shot=True) if attrs["State"].get("Running") else {}
+        return attrs, stats
 
     def _container(self, identifier: str):
         obj = self.client.containers.get(identifier)
