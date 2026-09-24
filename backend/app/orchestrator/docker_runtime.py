@@ -1,6 +1,7 @@
 import logging
 import socket
 import struct
+import time
 from pathlib import Path
 import docker
 from docker.errors import APIError, ImageNotFound, NotFound
@@ -134,6 +135,16 @@ class DockerRuntime:
         if container.labels.get("cyberlab.type") != "KALI":
             return
         container.exec_run(["python3", "/usr/local/bin/cyberlab-capture.py", "start", session_id, str(generation)], detach=True)
+        root = f"/var/lib/cyberlab/captures/{session_id}/{generation}"
+        deadline = time.monotonic() + 180
+        while time.monotonic() < deadline:
+            if container.exec_run(["test", "-f", f"{root}/ready.json"]).exit_code == 0:
+                return
+            if container.exec_run(["test", "-f", f"{root}/recorder-error.log"]).exit_code == 0:
+                error = container.exec_run(["cat", f"{root}/recorder-error.log"]).output.decode(errors="replace")
+                raise RuntimeFailure(f"桌面行为录制启动失败: {error[-2000:]}")
+            time.sleep(1)
+        raise RuntimeFailure("桌面行为录制启动超时")
 
     def stop_capture(self, container_id: str) -> None:
         container = self._container(container_id)
