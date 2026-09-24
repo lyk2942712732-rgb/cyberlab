@@ -11,7 +11,7 @@ PID = Path("/tmp/cyberlab-capture.pid")
 META = Path("/tmp/cyberlab-capture.json")
 
 RECORDER = r'''
-import json, signal, sys, time, traceback
+import json, os, signal, sys, time, traceback
 from pathlib import Path
 from threading import Event
 from openadapt_capture import Recorder
