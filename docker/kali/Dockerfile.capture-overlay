@@ -1,7 +1,7 @@
 # Promotion overlay from the pinned, validated OpenAdapt pilot image.
 FROM cyberlab/kali:openadapt-pilot
 USER root
-COPY capture.py /usr/local/bin/cyberlab-capture.py
+COPY docker/kali/capture.py /usr/local/bin/cyberlab-capture.py
 RUN chmod 755 /usr/local/bin/cyberlab-capture.py && mkdir -p /var/lib/cyberlab/captures && chown -R student:student /var/lib/cyberlab
 ENV RECORD_AUDIO=false RECORD_BROWSER_EVENTS=false SCREEN_CAPTURE_FPS=5 PLOT_PERFORMANCE=false CYBERLAB_CAPTURE_ROOT=/var/lib/cyberlab/captures
 USER student
