@@ -11,7 +11,7 @@ PID = Path("/tmp/cyberlab-capture.pid")
 META = Path("/tmp/cyberlab-capture.json")
 
 RECORDER = r'''
-import json, signal, sys, time
+import json, signal, sys, time, traceback
 from pathlib import Path
 from threading import Event
 from openadapt_capture import Recorder
@@ -20,16 +20,20 @@ root = sys.argv[1]
 stop = Event()
 signal.signal(signal.SIGTERM, lambda *_: stop.set())
 signal.signal(signal.SIGINT, lambda *_: stop.set())
-with Recorder(root, task_description="CyberLab desktop activity capture",
-              capture_audio=False, capture_video=True, capture_images=True,
-              video_encoding="mpeg4", video_pixel_format="yuv420p",
-              capture_structural_observations=False, screen_capture_fps=5,
-              plot_performance=False) as recorder:
-    if not recorder.wait_for_ready(timeout=180):
-        raise RuntimeError("recorder did not become ready")
-    Path(root, "ready.json").write_text(json.dumps({"session_id": recorder.control_session_id}))
-    while not stop.wait(1):
-        recorder.check_health()
+try:
+    with Recorder(root, task_description="CyberLab desktop activity capture",
+                  capture_audio=False, capture_video=True, capture_images=True,
+                  video_encoding="mpeg4", video_pixel_format="yuv420p",
+                  capture_structural_observations=False, screen_capture_fps=5,
+                  plot_performance=False) as recorder:
+        if not recorder.wait_for_ready(timeout=180):
+            raise RuntimeError("recorder did not become ready")
+        Path(root, "ready.json").write_text(json.dumps({"session_id": recorder.control_session_id}))
+        while not stop.wait(1):
+            recorder.check_health()
+except BaseException:
+    Path(root, "recorder-error.log").write_text(traceback.format_exc())
+    raise
 '''
 
 def start(session: str, generation: int) -> None:
