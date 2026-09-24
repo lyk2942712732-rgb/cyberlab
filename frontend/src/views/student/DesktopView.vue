@@ -82,7 +82,10 @@ async function connect() {
           socket.onmessage = null
           clearTimeout(handshakeTimer)
           rfb = new RFB(screen.value, socket)
-          rfb.scaleViewport = true; rfb.resizeSession = true
+          // Keep Kali's 1440x900 framebuffer stable for OpenAdapt recording.
+          // Browser resizing and fullscreen only scale the local canvas.
+          rfb.scaleViewport = true
+          rfb.resizeSession = false
           rfb.addEventListener('clipboard', receiveClipboard)
           rfb.addEventListener('connect', () => { connected.value = true; connecting.value = false })
           rfb.addEventListener('disconnect', () => { connected.value = false; connecting.value = false; status.value = '桌面连接已断开，可尝试重新连接。' })
