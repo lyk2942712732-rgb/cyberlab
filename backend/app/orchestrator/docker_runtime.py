@@ -6,6 +6,7 @@ from pathlib import Path
 import docker
 from docker.errors import APIError, ImageNotFound, NotFound
 from app.orchestrator.models import ContainerInfo, ContainerSpec, ImageInfo, ImageInUse, RuntimeFailure
+from app.core.config import settings
 
 log = logging.getLogger(__name__)
 MANAGED = {"cyberlab.managed": "true"}
@@ -123,7 +124,7 @@ class DockerRuntime:
             security_opt=["no-new-privileges:true"], privileged=False,
             dns=["127.0.0.1"], shm_size="256m", restart_policy={"Name": "no"},
             log_config=docker.types.LogConfig(type="json-file", config={"max-size": "10m", "max-file": "2"}),
-            volumes={"/var/lib/cyberlab/captures": {"bind": "/var/lib/cyberlab/captures", "mode": "rw"}},
+            volumes={settings().capture_host_dir: {"bind": "/var/lib/cyberlab/captures", "mode": "rw"}},
         )
         return container.id
 

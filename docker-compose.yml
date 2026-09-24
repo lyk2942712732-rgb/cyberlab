@@ -59,6 +59,7 @@ services:
     <<: *app
     environment:
       <<: *app-env
+      CAPTURE_HOST_DIR: ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/captures
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Generate .env first}
       STUDENT_PASSWORD: ${STUDENT_PASSWORD:?Generate .env first}
     volumes:
@@ -77,6 +78,9 @@ services:
   orchestrator:
     <<: *app
     user: '0:0'
+    environment:
+      <<: *app-env
+      CAPTURE_HOST_DIR: ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/captures
     command: [uvicorn, app.orchestrator.server:app, --host, 0.0.0.0, --port, '8081', --ws-max-size, '16777216']
     volumes:
       - ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/uploads/target-images:/var/lib/cyberlab/uploads/target-images
