@@ -23,8 +23,6 @@ signal.signal(signal.SIGINT, lambda *_: stop.set())
 # docker exec starts this detached supervisor without a consumer for its
 # stdio.  OpenAdapt's tqdm progress writers otherwise receive EPIPE during
 # finalization and report a false recording failure.
-sys.stdout.flush()
-sys.stderr.flush()
 devnull = os.open(os.devnull, os.O_WRONLY)
 os.dup2(devnull, 1)
 os.dup2(devnull, 2)
