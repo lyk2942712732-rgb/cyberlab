@@ -23,9 +23,11 @@ LABEL cyberlab.experiment="openadapt-pilot" \
 COPY patch_xrecord.py /opt/pilot-build/patch_xrecord.py
 COPY patch_receipts.py /opt/pilot-build/patch_receipts.py
 COPY patch_xrecord_close.py /opt/pilot-build/patch_xrecord_close.py
+COPY patch_xrecord_disable.py /opt/pilot-build/patch_xrecord_disable.py
 RUN /opt/openadapt/bin/python /opt/pilot-build/patch_xrecord.py \
     /opt/openadapt/lib/python3.14/site-packages/openadapt_capture/input_observer/linux.py
 RUN /opt/openadapt/bin/python /opt/pilot-build/patch_receipts.py /opt/openadapt/lib/python3.14/site-packages/openadapt_capture/recorder.py
 RUN /opt/openadapt/bin/python /opt/pilot-build/patch_xrecord_close.py /opt/openadapt/lib/python3.14/site-packages/openadapt_capture/input_observer/linux.py
-LABEL openadapt.local.patch="xrecord-create-sync-v1,native-receipt-forwarding-v1,xrecord-data-close-v1"
+RUN /opt/openadapt/bin/python /opt/pilot-build/patch_xrecord_disable.py /opt/openadapt/lib/python3.14/site-packages/openadapt_capture/input_observer/linux.py
+LABEL openadapt.local.patch="xrecord-create-sync-v1,native-receipt-forwarding-v1,xrecord-data-close-v1,xrecord-disable-sync-v1"
 USER student

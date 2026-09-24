@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     kali_image: str = "cyberlab/kali:local"
     kali_cpu: float = Field(default=2, ge=0.25, le=8)
     kali_memory_mb: int = Field(default=2048, ge=512, le=8192)
+    capture_dir: str = "/var/lib/cyberlab/captures"
+    capture_max_mb: int = Field(default=512, ge=64, le=4096)
     worker_interval: float = Field(default=3, ge=1, le=30)
     health_timeout: int = Field(default=90, ge=5, le=180)
     testing: bool = False

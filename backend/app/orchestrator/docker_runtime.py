@@ -122,12 +122,26 @@ class DockerRuntime:
             security_opt=["no-new-privileges:true"], privileged=False,
             dns=["127.0.0.1"], shm_size="256m", restart_policy={"Name": "no"},
             log_config=docker.types.LogConfig(type="json-file", config={"max-size": "10m", "max-file": "2"}),
-            # Deliberately no host mounts, devices, published ports or extra networks.
+            volumes={"/var/lib/cyberlab/captures": {"bind": "/var/lib/cyberlab/captures", "mode": "rw"}},
         )
         return container.id
 
     def start_container(self, container_id: str) -> None:
         self._container(container_id).start()
+
+    def start_capture(self, container_id: str, session_id: str, generation: int) -> None:
+        container = self._container(container_id)
+        if container.labels.get("cyberlab.type") != "KALI":
+            return
+        container.exec_run(["python3", "/usr/local/bin/cyberlab-capture.py", "start", session_id, str(generation)], detach=True)
+
+    def stop_capture(self, container_id: str) -> None:
+        container = self._container(container_id)
+        if container.labels.get("cyberlab.type") != "KALI":
+            return
+        result = container.exec_run(["python3", "/usr/local/bin/cyberlab-capture.py", "stop"])
+        if result.exit_code != 0:
+            raise RuntimeFailure("桌面行为录制收尾失败")
 
     def stop_container(self, container_id: str) -> None:
         try:

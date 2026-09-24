@@ -61,7 +61,9 @@ services:
       <<: *app-env
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Generate .env first}
       STUDENT_PASSWORD: ${STUDENT_PASSWORD:?Generate .env first}
-    volumes: ["${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/uploads/target-images:/var/lib/cyberlab/uploads/target-images"]
+    volumes:
+      - ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/uploads/target-images:/var/lib/cyberlab/uploads/target-images
+      - ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/captures:/var/lib/cyberlab/captures
     networks: [platform-net, database-net, lab-control-net]
     depends_on:
       migrate: {condition: service_completed_successfully}
@@ -78,6 +80,7 @@ services:
     command: [uvicorn, app.orchestrator.server:app, --host, 0.0.0.0, --port, '8081', --ws-max-size, '16777216']
     volumes:
       - ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/uploads/target-images:/var/lib/cyberlab/uploads/target-images
+      - ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/captures:/var/lib/cyberlab/captures
       - /var/run/docker.sock:/var/run/docker.sock
     networks: [database-net, lab-control-net]
     depends_on:

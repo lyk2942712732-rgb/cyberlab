@@ -19,6 +19,16 @@ class LabOrchestrator:
         self.networks = NetworkManager(runtime)
 
     def cleanup(self, db: Session, session: LabSession) -> None:
+        containers, _ = self.runtime.session_resources(session.id)
+        capture_error = None
+        for container in containers:
+            try:
+                self.runtime.stop_capture(container)
+            except Exception as exc:
+                capture_error = capture_error or exc
+                log.exception("Capture finalization failed session=%s container=%s", session.id, container)
+        if capture_error is not None:
+            raise capture_error
         self.networks.cleanup(session.id)
         for instance in db.scalars(select(LabInstance).where(LabInstance.session_id == session.id)):
             instance.status = "removed"
@@ -73,6 +83,7 @@ class LabOrchestrator:
                         info = next(s for s in states if s.id == instance.runtime_id)
                         instance.status, instance.ip_address = info.status, info.ip_address
                     session.status, session.error = "READY", None
+                    self.runtime.start_capture(identifiers[0], session.id, session.generation)
                     log.info("Session ready session=%s", session.id)
                     return
                 if any(s.status in ("exited", "dead") for s in states):
