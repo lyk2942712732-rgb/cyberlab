@@ -38,7 +38,7 @@ def start(session: str, generation: int) -> None:
     env = os.environ.copy()
     for candidate in Path("/proc").glob("[0-9]*/environ"):
         try:
-            values = candidate.read_bytes().split(b"\\0")
+            values = candidate.read_bytes().split(b"\0")
         except OSError:
             continue
         bus = next((v.decode().split("=", 1)[1] for v in values if v.startswith(b"DBUS_SESSION_BUS_ADDRESS=")), None)
