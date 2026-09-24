@@ -53,7 +53,13 @@ def stop() -> None:
         return
     try:
         pid = int(PID.read_text())
-        os.killpg(pid, signal.SIGINT)
+        # Signal only the recorder supervisor first.  Its OpenAdapt worker
+        # processes must remain alive while Recorder.stop() drains writers,
+        # seals the database, and publishes the verified terminal state.
+        # Broadcasting SIGINT to the whole process group interrupts those
+        # workers and turns an otherwise recoverable stop into a startup
+        # failure.
+        os.kill(pid, signal.SIGINT)
     except (ProcessLookupError, ValueError):
         PID.unlink(missing_ok=True)
         return
