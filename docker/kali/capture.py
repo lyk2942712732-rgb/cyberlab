@@ -54,17 +54,25 @@ def stop() -> None:
     if not PID.exists():
         return
     try:
-        os.killpg(int(PID.read_text()), signal.SIGTERM)
+        pid = int(PID.read_text())
+        os.killpg(pid, signal.SIGINT)
     except (ProcessLookupError, ValueError):
         PID.unlink(missing_ok=True)
         return
-    deadline = time.time() + 60
+    deadline = time.time() + 45
     while time.time() < deadline:
         try:
-            os.kill(int(PID.read_text()), 0)
+            os.kill(pid, 0)
         except (ProcessLookupError, ValueError):
             break
         time.sleep(.5)
+    else:
+        try:
+            os.killpg(pid, signal.SIGTERM)
+            time.sleep(5)
+            os.killpg(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
     PID.unlink(missing_ok=True)
 
 parser = argparse.ArgumentParser()
