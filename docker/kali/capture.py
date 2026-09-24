@@ -36,15 +36,13 @@ def start(session: str, generation: int) -> None:
     root = Path(os.environ.get("CYBERLAB_CAPTURE_ROOT", "/var/lib/cyberlab/captures")) / session / str(generation)
     root.mkdir(parents=True, exist_ok=False)
     env = os.environ.copy()
-    for candidate in Path("/proc").glob("[0-9]*/environ"):
-        try:
-            values = candidate.read_bytes().split(b"\0")
-        except OSError:
-            continue
-        bus = next((v.decode().split("=", 1)[1] for v in values if v.startswith(b"DBUS_SESSION_BUS_ADDRESS=")), None)
-        if bus:
-            env["DBUS_SESSION_BUS_ADDRESS"] = bus
-            break
+    pgrep = subprocess.run(["pgrep", "-x", "xfce4-session"], text=True, capture_output=True, check=True)
+    xfce_pid = pgrep.stdout.splitlines()[0]
+    values = Path(f"/proc/{xfce_pid}/environ").read_bytes().split(b"\0")
+    bus = next((v.decode().split("=", 1)[1] for v in values if v.startswith(b"DBUS_SESSION_BUS_ADDRESS=")), None)
+    if not bus:
+        raise RuntimeError("XFCE session has no D-Bus address")
+    env["DBUS_SESSION_BUS_ADDRESS"] = bus
     env.update(DISPLAY=":1", XDG_RUNTIME_DIR="/tmp/runtime-student", NO_AT_BRIDGE="0", MOZ_ACCESSIBILITY_ATSPI_ENABLED="1")
     proc = subprocess.Popen(["/opt/openadapt/bin/python", "-c", RECORDER, str(root)], env=env, start_new_session=True)
     PID.write_text(str(proc.pid))
