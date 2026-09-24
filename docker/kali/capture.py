@@ -20,6 +20,15 @@ root = sys.argv[1]
 stop = Event()
 signal.signal(signal.SIGTERM, lambda *_: stop.set())
 signal.signal(signal.SIGINT, lambda *_: stop.set())
+# docker exec starts this detached supervisor without a consumer for its
+# stdio.  OpenAdapt's tqdm progress writers otherwise receive EPIPE during
+# finalization and report a false recording failure.
+sys.stdout.flush()
+sys.stderr.flush()
+devnull = os.open(os.devnull, os.O_WRONLY)
+os.dup2(devnull, 1)
+os.dup2(devnull, 2)
+os.close(devnull)
 try:
     with Recorder(root, task_description="CyberLab desktop activity capture",
                   capture_audio=False, capture_video=True, capture_images=True,
