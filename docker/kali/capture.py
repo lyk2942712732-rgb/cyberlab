@@ -5,6 +5,7 @@ import os
 import signal
 import subprocess
 import time
+import traceback
 from pathlib import Path
 
 PID = Path("/tmp/cyberlab-capture.pid")
@@ -15,15 +16,6 @@ import json, os, signal, sys, time, traceback
 from functools import partial
 from pathlib import Path
 from threading import Event
-from openadapt_capture import Recorder
-import openadapt_capture.recorder as recorder_module
-
-# The pinned OpenAdapt build defaults to 30 seconds for its worker barrier.
-# Cold Python worker imports and video initialization can exceed that on the
-# teaching VM. Keep this below wait_for_ready and the controller's 180s budget.
-recorder_module._wait_for_tasks_started = partial(
-    recorder_module._wait_for_tasks_started, timeout=90.0)
-
 root = sys.argv[1]
 stop = Event()
 signal.signal(signal.SIGTERM, lambda *_: stop.set())
@@ -31,6 +23,13 @@ signal.signal(signal.SIGINT, lambda *_: stop.set())
 # The launcher redirects stdout/stderr to a private per-session log, so
 # detached workers retain startup diagnostics without writing to a closed pipe.
 try:
+    from openadapt_capture import Recorder
+    import openadapt_capture.recorder as recorder_module
+
+    # The pinned build's 30s worker barrier is too short for cold VM imports.
+    # Keep this below wait_for_ready and the controller's 180s budget.
+    recorder_module._wait_for_tasks_started = partial(
+        recorder_module._wait_for_tasks_started, timeout=90.0)
     with Recorder(root, task_description="CyberLab desktop activity capture",
                   capture_audio=False, capture_video=True, capture_images=True,
                   video_encoding="mpeg4", video_pixel_format="yuv420p",
@@ -39,16 +38,22 @@ try:
         try:
             if not recorder.wait_for_ready(timeout=120):
                 raise RuntimeError("recorder did not become ready within 120 seconds")
+            if stop.is_set():
+                raise RuntimeError("recorder startup cancelled")
+            Path(root, "ready.json").write_text(json.dumps({"session_id": recorder.control_session_id}))
+            while not stop.wait(1):
+                recorder.check_health()
         except BaseException:
             # Persist the reason before __exit__ attempts potentially slow cleanup.
             Path(root, "recorder-error.log").write_text(traceback.format_exc())
             raise
-        Path(root, "ready.json").write_text(json.dumps({"session_id": recorder.control_session_id}))
-        while not stop.wait(1):
-            recorder.check_health()
+        finally:
+            Path(root, "ready.json").unlink(missing_ok=True)
 except BaseException:
     Path(root, "recorder-error.log").write_text(traceback.format_exc())
     raise
+finally:
+    Path(root, "ready.json").unlink(missing_ok=True)
 '''
 
 def start(session: str, generation: int) -> None:
@@ -87,11 +92,14 @@ def stop() -> None:
     except (ProcessLookupError, ValueError):
         PID.unlink(missing_ok=True)
         return
-    deadline = time.time() + 45
-    while time.time() < deadline:
+    deadline = time.monotonic() + 45
+    while time.monotonic() < deadline:
         try:
             os.kill(pid, 0)
-        except (ProcessLookupError, ValueError):
+            # A zombie has already exited; kill(pid, 0) alone still succeeds.
+            if Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0] == "Z":
+                break
+        except (ProcessLookupError, FileNotFoundError, ValueError):
             break
         time.sleep(.5)
     else:
@@ -110,4 +118,11 @@ start_parser.add_argument("session")
 start_parser.add_argument("generation", type=int)
 sub.add_parser("stop")
 args = parser.parse_args()
-start(args.session, args.generation) if args.operation == "start" else stop()
+try:
+    start(args.session, args.generation) if args.operation == "start" else stop()
+except Exception:
+    if args.operation == "start":
+        root = Path(os.environ.get("CYBERLAB_CAPTURE_ROOT", "/var/lib/cyberlab/captures")) / args.session / str(args.generation)
+        if root.is_dir():
+            (root / "recorder-error.log").write_text(traceback.format_exc())
+    raise
