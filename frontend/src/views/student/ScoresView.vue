@@ -10,7 +10,6 @@ onMounted(async () => { try { scores.value = await get<Score[]>('/me/scores') } 
 <div v-loading="busy">
 <div class="page-heading">
 <div>
-<div class="eyebrow">EVERY STEP COUNTS</div>
 <h1>我的成绩</h1>
 <p class="muted">记录每一次尝试，看见自己的成长。</p>
 </div>
@@ -31,7 +30,7 @@ onMounted(async () => { try { scores.value = await get<Score[]>('/me/scores') } 
 </el-table-column>
 <el-table-column width="100">
 <template #default="{ row }">
-<router-link :to="`/labs/${row.lab_id}`">查看实验 ↗</router-link>
+<router-link :to="`/labs/${row.lab_id}`">查看实验</router-link>
 </template>
 </el-table-column>
 </el-table>

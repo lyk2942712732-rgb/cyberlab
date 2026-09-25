@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { House, Reading, Monitor, Trophy, Collection, Box, User, SwitchButton, ArrowRight, Fold, Expand } from '@element-plus/icons-vue'
+import { House, Reading, Monitor, Trophy, Collection, Box, User, SwitchButton, Fold, Expand } from '@element-plus/icons-vue'
 import { useAuth } from '../stores/auth'
 const auth = useAuth(), route = useRoute(), router = useRouter()
+const clock = ref('')
+let clockTimer: ReturnType<typeof setInterval> | undefined
+function tick() { clock.value = new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()) }
+onMounted(() => { tick(); clockTimer = setInterval(tick, 15000) })
+onBeforeUnmount(() => clearInterval(clockTimer))
 const collapsed = ref(localStorage.getItem('cyberlab-sidebar-collapsed') === 'true' || (localStorage.getItem('cyberlab-sidebar-collapsed') === null && window.innerWidth <= 950))
 watch(collapsed, value => localStorage.setItem('cyberlab-sidebar-collapsed', String(value)))
 const isAdmin = computed(() => auth.user?.role === 'ADMIN')
@@ -24,26 +29,15 @@ function logout() { auth.logout(); router.push('/login') }
 </div>
 </router-link>
       <button class="sidebar-toggle" :aria-label="collapsed ? '展开侧栏' : '收起侧栏'" :title="collapsed ? '展开侧栏' : '收起侧栏'" :aria-expanded="!collapsed" @click="collapsed = !collapsed">
-        <el-icon><Expand v-if="collapsed"/><Fold v-else/></el-icon><span v-if="!collapsed">收起侧栏</span>
+<el-icon><Expand v-if="collapsed"/><Fold v-else/></el-icon><span v-if="!collapsed" class="nav-label">收起侧栏</span>
       </button>
-      <div class="workspace-label">{{ isAdmin ? '教学管理端' : '学生学习空间' }} <span>{{ isAdmin ? 'ADMIN' : 'LEARN' }}</span>
-</div>
+      <div class="workspace-label">{{ isAdmin ? '教学管理端' : '学生学习空间' }}</div>
       <nav>
 <router-link v-for="item in menu" :key="item.path" :to="item.path" :title="item.label" :aria-label="item.label" :aria-current="(item.path === '/' ? route.path === '/' : route.path.startsWith(item.path)) ? 'page' : undefined" :class="{ selected: item.path === '/' ? route.path === '/' : route.path.startsWith(item.path) }">
-<el-icon>
-<component :is="item.icon" />
-</el-icon><span class="nav-label">{{ item.label }}</span><el-icon class="nav-arrow">
-<ArrowRight />
-</el-icon>
+<el-icon><component :is="item.icon" /></el-icon><span class="nav-label">{{ item.label }}</span>
 </router-link>
 </nav>
       <div class="sidebar-bottom">
-<div class="sidebar-note">
-<div class="eyebrow">LEARN BY DOING</div>
-<p>理解每一个原理，<br/>验证每一种可能。</p>
-</div>
-<div class="safe-note">
-<span class="status-dot" />在独立环境中探索安全</div>
 <div class="user-block">
 <span class="avatar">{{ (auth.user?.real_name || auth.user?.username || 'U').slice(0, 1) }}</span>
 <div>
@@ -64,16 +58,13 @@ function logout() { auth.logout(); router.push('/login') }
 <span class="muted">CyberLab</span>
 <span class="breadcrumb-slash">/</span>{{ isAdmin && route.path === '/' ? '平台概览' : route.meta.title }}</div>
 <div class="topbar-right">
-<span class="status-dot" />学习 · 实践 · 成长<el-icon>
-<User />
-</el-icon>
+<span class="topbar-clock">{{ clock }}</span><el-icon><User /></el-icon>
 </div>
 </header>
 <main class="page">
 <router-view :key="route.path" />
 </main>
-<footer class="page-footer">CYBERLAB <span>从理解原理，到亲手验证。</span>
-</footer>
+<footer class="page-footer"><span>网络安全教学实验室</span><span>理论与授权实验环境</span></footer>
 </div>
   </div>
 </template>

@@ -14,7 +14,11 @@ async function start() { busy.value = true; try { const session = await post<Lab
 <router-link to="/labs" class="back-link">← 实验空间</router-link>
 <div class="page-heading">
 <div>
-<div class="eyebrow">{{ lab.category }} / {{ difficulty[lab.difficulty] }}</div>
+<div class="meta-row">
+<span class="meta-chip solid">{{ lab.category }}</span>
+<span class="meta-chip">{{ difficulty[lab.difficulty] }}</span>
+<span class="meta-chip">限时 {{ lab.duration_minutes }} 分钟</span>
+</div>
 <h1>{{ lab.name }}</h1>
 <p class="muted">{{ lab.description }}</p>
 </div>
@@ -28,9 +32,8 @@ async function start() { busy.value = true; try { const session = await post<Lab
 <MarkdownContent :content="lab.steps"/>
 </article>
 <aside class="panel lab-summary">
-<span class="lab-icon">&gt;_</span>
-<h2>准备好开始了吗？</h2>
-<p class="muted">启动后将为你创建专属 Kali 桌面和靶机环境。</p>
+<h2>启动实验环境</h2>
+<p class="muted">启动后为你创建专属的 Kali 桌面与靶机，环境到期自动回收。</p>
 <dl>
 <div>
 <dt>实验时长</dt>
@@ -53,8 +56,8 @@ async function start() { busy.value = true; try { const session = await post<Lab
 <dd>正确提交 100 分</dd>
 </div>
 </dl>
-<el-button type="primary" size="large" class="full-width" :loading="busy" @click="start">启动实验 ↗</el-button>
-<small class="muted">每次仅可运行一个实验；到期自动回收。</small>
+<el-button type="primary" size="large" class="full-width" :loading="busy" @click="start">启动实验</el-button>
+<small class="muted">同一时间只能运行一个实验。</small>
 </aside>
 </div>
 </div>

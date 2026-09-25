@@ -11,7 +11,6 @@ onMounted(async () => { try { [labs.value, scores.value] = await Promise.all([ge
 <div v-loading="busy">
 <div class="page-heading">
 <div>
-<div class="eyebrow">A SPACE TO EXPERIMENT</div>
 <h1>实验空间</h1>
 <p class="muted">在专属环境中动手实践，把每个知识点变成你的经验。</p>
 </div>
@@ -24,21 +23,18 @@ onMounted(async () => { try { [labs.value, scores.value] = await Promise.all([ge
 </el-select>
 </div>
 <div class="lab-grid">
-<article v-for="(lab, index) in filtered" :key="lab.id" class="panel lab-card">
-<div class="lab-card-top">
-<span class="lab-number">LAB / {{ String(index + 1).padStart(2, '0') }}</span>
-<el-tag effect="plain" round>{{ difficulty[lab.difficulty] }}</el-tag>
+<article v-for="lab in filtered" :key="lab.id" class="panel lab-card">
+<div class="meta-row">
+<span class="meta-chip">{{ lab.category }}</span>
+<el-tag effect="plain" type="info">{{ difficulty[lab.difficulty] }}</el-tag>
 </div>
-<div class="lab-icon">&gt;_</div>
-<span class="eyebrow">{{ lab.category }}</span>
 <h2>{{ lab.name }}</h2>
 <p class="muted clamp-two">{{ lab.description }}</p>
 <div class="lab-meta">
-<span>◷ {{ lab.duration_minutes }} 分钟</span>
-<span>{{ scores.find(s => s.lab_id === lab.id)?.completed ? '✓ 已完成 · 100 分' : '等待你的探索' }}</span>
+<span>限时 {{ lab.duration_minutes }} 分钟</span>
+<span :class="{ done: scores.find(s => s.lab_id === lab.id)?.completed }">{{ scores.find(s => s.lab_id === lab.id)?.completed ? '已完成，100 分' : '尚未完成' }}</span>
 </div>
-<router-link :to="`/labs/${lab.id}`" class="card-link">查看实验 <span>↗</span>
-</router-link>
+<router-link :to="`/labs/${lab.id}`" class="card-link">查看实验</router-link>
 </article>
 </div>
 <el-empty v-if="!busy && !filtered.length" description="暂无符合条件的实验"/>

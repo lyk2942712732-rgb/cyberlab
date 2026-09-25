@@ -15,9 +15,8 @@ onMounted(load); onBeforeUnmount(() => { disposed = true; clearTimeout(poll) })
 <div>
 <div class="page-heading">
 <div>
-<div class="eyebrow">LIVE LAB OPERATIONS</div>
 <h1>运行实例</h1>
-<p class="muted">查看独立实验环境，及时处理异常实例。每 5 秒自动更新。</p>
+<p class="muted">查看隔离实验环境的实时状态，及时处理异常实例。列表每 5 秒自动更新。</p>
 </div>
 <el-switch v-model="showAll" active-text="显示历史实例"/>
 </div>

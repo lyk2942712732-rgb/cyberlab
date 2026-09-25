@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Reading, Monitor, Trophy, Finished, ArrowRight, TopRight } from '@element-plus/icons-vue'
+import { Reading, Monitor, Trophy, Finished, ArrowRight } from '@element-plus/icons-vue'
 import { useAuth } from '../stores/auth'
 import { get } from '../api/http'
 import type { Course, LabSession, Progress, Score } from '../types'
@@ -27,6 +27,10 @@ const cards = computed(() => admin.value ? [
 const nextCourse = computed(() => courses.value.find(c => percent(c) > 0 && percent(c) < 100) || courses.value.find(c => percent(c) < 100) || courses.value[0])
 const today = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
 function percent(course: Course) { const lessons = course.chapters.flatMap(c => c.lessons); return lessons.length ? Math.round(lessons.filter(l => completed.value.has(l.id)).length / lessons.length * 100) : 0 }
+function lessonCount(course: Course) { return course.chapters.reduce((n, c) => n + c.lessons.length, 0) }
+function chapterCount(course: Course) { return Math.max(1, course.chapters.length) }
+function spineSegments(course: Course) { return Math.min(14, Math.max(4, lessonCount(course))) }
+function spineDone(course: Course) { const all = course.chapters.flatMap(c => c.lessons); return all.length ? Math.round(spineSegments(course) * all.filter(l => completed.value.has(l.id)).length / all.length) : 0 }
 async function load() {
   busy.value = true; failed.value = false
   try {
@@ -41,11 +45,10 @@ onMounted(load)
   <div v-loading="busy" class="dashboard">
     <div class="page-heading">
       <div>
-        <div class="eyebrow"><span class="eyebrow-line"/>{{ admin ? 'TEACHING OVERVIEW' : 'YOUR LEARNING WORKSPACE' }}</div>
         <h1>{{ admin ? '教学平台概览' : `你好，${auth.user?.real_name || auth.user?.username}` }}<span v-if="!admin" class="greeting-dot">.</span></h1>
         <p class="muted">{{ admin ? '掌握教学进度，让每一次实践顺利发生。' : '保持好奇，动手求证。今天也离安全世界更近一步。' }}</p>
       </div>
-      <div class="dashboard-date"><span>WORKSPACE / {{ admin ? 'ADMIN' : 'STUDENT' }}</span><time>{{ today }}</time></div>
+      <div class="dashboard-date"><time>{{ today }}</time></div>
     </div>
 
     <div v-if="failed" class="load-error" role="alert">工作台数据暂时无法加载。<el-button link type="primary" @click="load">重新加载</el-button></div>
@@ -53,31 +56,43 @@ onMounted(load)
     <div v-if="!admin" class="dashboard-feature">
       <section class="lab-feature">
         <div class="feature-copy">
-          <span class="feature-tag"><span/> 理论之外，亲手探索</span>
-          <h2>真正的理解，<br/>从<span>实践</span>开始。</h2>
-          <p>走进独立实验环境，把每一个「为什么」<br/>变成你亲手验证的答案。</p>
-          <router-link to="/labs" class="action-link action-accent">探索实验空间 <el-icon><TopRight/></el-icon></router-link>
-          <div class="feature-footnote">KALI DESKTOP <span>／</span> 浏览器即实验室</div>
+          <span class="feature-tag"><span/> 独立实验环境</span>
+          <h2>真正的理解，从亲手验证开始</h2>
+          <p>每个实验都运行在隔离网络中：一台 Kali 攻击机、一台靶机，浏览器即实验室。</p>
+          <router-link to="/labs" class="action-link">进入实验空间</router-link>
+          <div class="feature-footnote">实验到期自动回收，环境互相隔离</div>
         </div>
         <div class="network-art" aria-hidden="true">
-          <span class="diagram-label">ISOLATED LAB / 01</span>
           <svg viewBox="0 0 300 280" fill="none">
-            <circle cx="150" cy="140" r="111" stroke="currentColor" stroke-dasharray="3 7"/>
-            <circle cx="150" cy="140" r="78" stroke="currentColor"/>
-            <path d="M150 33V85M40 140H95M205 140H260M150 195V245" stroke="currentColor"/>
-            <path d="M73 63L111 101M189 179L227 217M227 63L189 101M73 217L111 179" stroke="currentColor" stroke-dasharray="4 5"/>
-            <rect x="101" y="91" width="98" height="98" rx="20" fill="#223d36" stroke="#a6bb9e"/>
-            <path d="M124 125L142 140L124 155M152 156H176" stroke="#e7edca" stroke-width="4"/>
-            <rect x="134" y="14" width="32" height="32" rx="8" fill="#dce6cb"/><path d="M143 30L148 35L157 25" stroke="#25463a" stroke-width="2"/>
-            <rect x="242" y="124" width="32" height="32" rx="8" fill="#e69970"/><path d="M251 135H265M251 141H261M251 147H265" stroke="#3b3025" stroke-width="2"/>
-            <circle cx="40" cy="140" r="6" fill="#dce6cb"/><circle cx="150" cy="246" r="6" fill="#dce6cb"/>
+            <circle cx="150" cy="140" r="112" stroke="currentColor" stroke-dasharray="3 7" opacity=".55"/>
+            <circle cx="150" cy="140" r="78" stroke="currentColor" opacity=".8"/>
+            <path id="link-h" d="M40 140H102M198 140H258" stroke="currentColor"/>
+            <path id="link-v" d="M150 34V92M150 188V246" stroke="currentColor"/>
+            <rect class="node-core" x="102" y="92" width="96" height="96" rx="14" fill="#123226" stroke="#3d6354"/>
+            <path d="M126 126L146 141L126 156M156 157H180" stroke="#8fc7ab" stroke-width="4" stroke-linecap="round"/>
+            <rect x="134" y="16" width="32" height="30" rx="7" fill="#1e4437" stroke="#3d6354"/>
+            <path d="M143 31L148 36L158 25" stroke="#7fd4ab" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect class="node-target" x="242" y="125" width="32" height="30" rx="7" fill="#3a2a12" stroke="#7a5a22"/>
+            <path d="M251 134H266M251 140H262M251 146H266" stroke="#e0a54e" stroke-width="2" stroke-linecap="round"/>
+            <rect x="26" y="125" width="32" height="30" rx="7" fill="#1e4437" stroke="#3d6354"/>
+            <path d="M35 140H50M45 134L51 140L45 146" stroke="#7fd4ab" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="134" y="234" width="32" height="30" rx="7" fill="#1e4437" stroke="#3d6354"/>
+            <circle cx="150" cy="249" r="6" fill="none" stroke="#7fd4ab" stroke-width="2"/>
+            <circle cx="42" cy="140" r="3.5" fill="#7fd4ab">
+              <animateMotion dur="2.4s" repeatCount="indefinite" path="M42 140H102" begin="0s"/>
+            </circle>
+            <circle cx="198" cy="140" r="3.5" fill="#e0a54e">
+              <animateMotion dur="2.4s" repeatCount="indefinite" path="M198 140H258" begin="1.2s"/>
+            </circle>
+            <circle cx="150" cy="46" r="3.5" fill="#7fd4ab">
+              <animateMotion dur="2.4s" repeatCount="indefinite" path="M150 46V92" begin=".6s"/>
+            </circle>
           </svg>
-          <div class="diagram-caption"><span class="status-dot"/> 独立环境 · 专注探索</div>
+          <div class="diagram-caption"><span class="status-dot live"/> 隔离网络：攻击机、靶机与判题服务</div>
         </div>
       </section>
       <section class="learning-note">
-        <div class="note-heading"><span class="eyebrow">CONTINUE LEARNING</span><el-icon><Reading/></el-icon></div>
-        <span class="note-step">下一站 / 知识进阶</span>
+        <div class="note-heading"><el-icon><Reading/></el-icon> 继续学习</div>
         <h2>{{ nextCourse?.name || '从第一门课开始' }}</h2>
         <p>{{ nextCourse ? '拾起上次的思路，让新的知识继续生长。' : '循序渐进理解原理，再到实验中亲手验证。' }}</p>
         <template v-if="nextCourse">
@@ -89,34 +104,38 @@ onMounted(load)
     </div>
 
     <div class="stat-grid" :class="{ 'admin-stats': admin }">
-      <div v-for="(card, index) in cards" :key="card.label" class="stat-card">
+      <div v-for="card in cards" :key="card.label" class="stat-card">
         <div class="stat-label"><span>{{ card.label }}</span><el-icon><component :is="card.icon"/></el-icon></div>
         <strong>{{ busy || failed ? '—' : card.value }}<small v-if="card.label === '平均成绩'">/ 100</small></strong>
-        <div class="stat-foot"><small>{{ card.note }}</small><span>0{{ index + 1 }}</span></div>
+        <div class="stat-foot"><small>{{ card.note }}</small></div>
       </div>
     </div>
 
     <template v-if="!admin">
-      <div class="section-heading"><h2><span class="section-index">01 /</span> 我的课程</h2><router-link to="/courses">全部课程 <span aria-hidden="true">↗</span></router-link></div>
+      <div class="section-heading"><h2>我的课程</h2><router-link to="/courses">查看全部课程</router-link></div>
       <div class="course-grid dashboard-courses">
-        <router-link v-for="(course, index) in courses.slice(0, 3)" :key="course.id" :to="`/courses/${course.id}`" class="panel course-card" :class="`course-tone-${index % 3}`">
-          <div class="course-card-heading"><span class="course-symbol"><el-icon><Reading/></el-icon></span><span class="course-code">COURSE / {{ String(index + 1).padStart(2, '0') }}</span><span class="course-arrow">↗</span></div>
+        <router-link v-for="course in courses.slice(0, 3)" :key="course.id" :to="`/courses/${course.id}`" class="panel course-card">
+          <div class="course-cover">
+            <div class="cover-spine" aria-hidden="true"><i v-for="n in spineSegments(course)" :key="n" :class="{ done: n <= spineDone(course) }"/></div>
+            <p><b>{{ chapterCount(course) }}</b> 章 <b>{{ lessonCount(course) }}</b> 课时</p>
+          </div>
           <h3>{{ course.name }}</h3>
           <p class="muted clamp-two">{{ course.description }}</p>
-          <div class="progress-label"><span>{{ course.chapters.length }} 个章节</span><span>已学习 <strong>{{ percent(course) }}%</strong></span></div>
-          <el-progress :percentage="percent(course)" :show-text="false" :stroke-width="4" />
+          <div class="progress-label"><span>学习进度</span><span><strong>{{ percent(course) }}%</strong></span></div>
+          <el-progress :percentage="percent(course)" :show-text="false" :stroke-width="4"/>
+          <span class="card-link">{{ percent(course) === 100 ? '回顾课程' : percent(course) ? '继续学习' : '开始学习' }}</span>
         </router-link>
       </div>
       <el-empty v-if="!busy && !failed && !courses.length" description="课程正在准备中，稍后再来探索" />
     </template>
 
     <section class="panel recent-sessions">
-      <div class="section-heading"><h2><span class="section-index">{{ admin ? '01' : '02' }} /</span> 最近实验</h2><router-link :to="admin ? '/admin/sessions' : '/labs'">{{ admin ? '查看运行实例' : '前往实验空间' }} ↗</router-link></div>
+      <div class="section-heading"><h2>最近实验</h2><router-link :to="admin ? '/admin/sessions' : '/labs'">{{ admin ? '查看全部运行实例' : '前往实验空间' }}</router-link></div>
       <el-table :data="sessions.slice(0, 6)" empty-text="还没有实验记录，去开启第一次探索吧">
         <el-table-column prop="lab_name" label="实验名称" min-width="180"/>
         <el-table-column label="状态" width="130"><template #default="{ row }"><StatusTag :status="row.status" /></template></el-table-column>
         <el-table-column label="启动时间" min-width="180"><template #default="{ row }">{{ date(row.started_at) }}</template></el-table-column>
-        <el-table-column label="操作" width="100"><template #default="{ row }"><router-link :to="`/sessions/${row.id}`">查看 →</router-link></template></el-table-column>
+        <el-table-column label="操作" width="100"><template #default="{ row }"><router-link :to="`/sessions/${row.id}`">查看</router-link></template></el-table-column>
       </el-table>
     </section>
   </div>

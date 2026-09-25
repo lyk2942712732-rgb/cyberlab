@@ -21,22 +21,21 @@ onMounted(async () => { try { [course.value, progress.value] = await Promise.all
 </div>
 <div class="learning-layout">
 <aside class="panel lesson-directory">
-<div class="eyebrow">课程目录</div>
+<h2>课程目录</h2>
 <section v-for="(chapter, i) in course?.chapters" :key="chapter.id">
-<h3>{{ String(i + 1).padStart(2, '0') }} / {{ chapter.title }}</h3>
+<h3><span>{{ String(i + 1).padStart(2, '0') }}</span>{{ chapter.title }}</h3>
 <button v-for="item in chapter.lessons" :key="item.id" :class="['lesson-link', { active: lesson?.id === item.id }]" @click="selectLesson(item.id)">
-<span>{{ progress.some(p => p.lesson_id === item.id) ? '✓' : '○' }}</span>{{ item.title }}</button>
+<span class="lesson-mark" :class="{ done: progress.some(p => p.lesson_id === item.id) }">✓</span>{{ item.title }}</button>
 </section>
 </aside>
 <article class="panel lesson-article">
 <template v-if="lesson">
-<div class="eyebrow">THEORY & PRACTICE</div>
 <h1>{{ lesson.title }}</h1>
 <MarkdownContent :content="lesson.content"/>
 <div class="lesson-actions">
 <el-button type="primary" :loading="saving" :disabled="progress.some(p => p.lesson_id === lesson?.id)" @click="complete">{{ progress.some(p => p.lesson_id === lesson?.id) ? '✓ 已完成学习' : '标记为已完成' }}</el-button>
 <router-link v-if="lesson.related_lab_id" :to="`/labs/${lesson.related_lab_id}`">
-<el-button>进入关联实验 ↗</el-button>
+<el-button>进入关联实验</el-button>
 </router-link>
 </div>
 </template>

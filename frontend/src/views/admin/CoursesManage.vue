@@ -26,11 +26,10 @@ onMounted(load)
 <div v-loading="busy">
 <div class="page-heading">
 <div>
-<div class="eyebrow">BUILD THE LEARNING PATH</div>
 <h1>课程管理</h1>
 <p class="muted">组织课程、章节与课时，将理论内容连接到实验。</p>
 </div>
-<el-button type="primary" size="large" @click="open('courses')">＋ 新建课程</el-button>
+<el-button type="primary" size="large" @click="open('courses')">新建课程</el-button>
 </div>
 <section v-for="course in courses" :key="course.id" class="panel margin-bottom">
 <div class="section-heading">
@@ -48,10 +47,10 @@ onMounted(load)
 <el-collapse>
 <el-collapse-item v-for="chapter in course.chapters" :key="chapter.id" :name="chapter.id">
 <template #title>
-<strong>{{ chapter.sort_order }} · {{ chapter.title }}</strong>
+<span class="chapter-title"><small>{{ String(chapter.sort_order).padStart(2, '0') }}</small><strong>{{ chapter.title }}</strong></span>
 </template>
 <div class="chapter-actions">
-<el-button size="small" @click="open('lessons', undefined, chapter.id)">＋ 添加课时</el-button>
+<el-button size="small" @click="open('lessons', undefined, chapter.id)">添加课时</el-button>
 <el-button size="small" @click="open('chapters', chapter)">编辑章节</el-button>
 <el-button size="small" type="danger" link @click="erase('chapters', chapter.id)">删除章节</el-button>
 </div>

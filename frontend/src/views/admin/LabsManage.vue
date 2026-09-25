@@ -18,11 +18,10 @@ onMounted(load)
 <div v-loading="busy">
 <div class="page-heading">
 <div>
-<div class="eyebrow">DESIGN HANDS-ON LEARNING</div>
 <h1>实验管理</h1>
 <p class="muted">配置实验目标、靶机镜像与判题规则。</p>
 </div>
-<el-button type="primary" size="large" @click="open()">＋ 新建实验</el-button>
+<el-button type="primary" size="large" @click="open()">新建实验</el-button>
 </div>
 <section class="panel">
 <el-table :data="labs" empty-text="还没有实验模板">

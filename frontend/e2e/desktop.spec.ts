@@ -89,5 +89,5 @@ test('管理端指标布局、实验卡片、登录注册表单可用', async ({
   await page.getByRole('button', { name: '注册学生账号', exact: true }).click()
   await expect(page.getByText('学号', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '返回登录' }).click()
-  await expect(page.getByRole('button', { name: '登录工作台 →' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '登录工作台' })).toBeVisible()
 })

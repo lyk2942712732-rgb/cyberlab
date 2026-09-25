@@ -54,13 +54,12 @@ onBeforeUnmount(() => { disposed = true; clearInterval(timer); clearTimeout(poll
 <ResourcePanel v-if="session" :session-id="session.id" :status="session.status" :instance-key="session.instances.map(i => i.runtime_id).join(',')"/>
 <div class="experiment-layout">
 <aside class="panel experiment-guide">
-<div class="eyebrow">EXPERIMENT GUIDE</div>
 <h3>实验目标</h3>
 <MarkdownContent :content="lab?.objective"/>
 <div class="target-address">
 <small>在 Kali 内访问靶机</small>
 <code>{{ session?.target_ip ? `${session.target_ip}:${lab?.target_port}` : '等待环境就绪' }}</code>
-<p class="small muted" style="margin:8px 0 0">IP：{{ session?.target_ip || '—' }} · 端口：{{ lab?.target_port || '—' }}</p>
+<p class="small muted" style="margin:8px 0 0">目标 IP {{ session?.target_ip || '—' }}，端口 {{ lab?.target_port || '—' }}</p>
 </div>
 <h3>操作指引</h3>
 <MarkdownContent :content="lab?.steps"/>
@@ -68,9 +67,9 @@ onBeforeUnmount(() => { disposed = true; clearInterval(timer); clearTimeout(poll
 <section class="desktop-panel" :class="{ 'desktop-panel-expanded': expanded }">
 <header>
 <div>
-<span class="status-dot"/>Kali Desktop<span v-if="expanded" class="desktop-remaining">剩余 {{ remaining }}</span></div>
+<span class="status-dot" :class="{ live: session?.status === 'READY' }"/>Kali Desktop<span v-if="expanded" class="desktop-remaining">剩余 {{ remaining }}</span></div>
 <div class="desktop-header-actions">
-<a v-if="canUse" :href="`/desktop/${session?.id}`" target="_blank" rel="noopener">在新窗口打开 ↗</a>
+<a v-if="canUse" :href="`/desktop/${session?.id}`" target="_blank" rel="noopener">在新窗口打开</a>
 <el-button size="small" :aria-pressed="expanded" @click="expanded = !expanded">{{ expanded ? '退出全屏' : '全屏' }}</el-button>
 </div>
 </header>
@@ -89,7 +88,7 @@ onBeforeUnmount(() => { disposed = true; clearInterval(timer); clearTimeout(poll
 <form @submit.prevent="submit">
 <label for="flag-input">提交实验 Flag</label>
 <el-input id="flag-input" v-model="flag" placeholder="flag{...}" maxlength="512" :disabled="!canUse"/>
-<el-button type="primary" native-type="submit" :loading="busy" :disabled="!canUse">提交验证 →</el-button>
+<el-button type="primary" native-type="submit" :loading="busy" :disabled="!canUse">提交验证</el-button>
 </form>
 <div class="session-actions">
 <el-button :disabled="!canUse || busy" @click="command('reset')">重置实验</el-button>

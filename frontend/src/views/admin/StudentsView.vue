@@ -12,7 +12,6 @@ onMounted(async () => { try { students.value = await get<StudentStats[]>('/admin
 <div v-loading="busy">
 <div class="page-heading">
 <div>
-<div class="eyebrow">FOLLOW EVERY STUDENT'S GROWTH</div>
 <h1>学生成绩</h1>
 <p class="muted">了解实验完成情况与理论学习进度。</p>
 </div>
@@ -31,12 +30,12 @@ onMounted(async () => { try { students.value = await get<StudentStats[]>('/admin
 </el-table-column>
 <el-table-column width="120">
 <template #default="{ row }">
-<el-button link type="primary" @click="open(row.id)">查看详情 ↗</el-button>
+<el-button link type="primary" @click="open(row.id)">查看详情</el-button>
 </template>
 </el-table-column>
 </el-table>
 </section>
-<el-dialog v-model="dialog" :title="`${detail?.user.real_name || detail?.user.username || ''} · 学习档案`" width="min(960px, 94vw)">
+<el-dialog v-model="dialog" :title="`${detail?.user.real_name || detail?.user.username || ''} 的学习档案`" width="min(960px, 94vw)">
 <template v-if="detail">
 <div class="inline-gap margin-bottom">
 <span class="count-pill">已完成 {{ detail.progress.length }} 个理论课时</span>

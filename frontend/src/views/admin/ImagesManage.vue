@@ -24,14 +24,12 @@ onMounted(load); onBeforeUnmount(() => { disposed = true; clearTimeout(poll) })
 <div>
 <div class="page-heading">
 <div>
-<div class="eyebrow">YOUR TARGET LIBRARY</div>
 <h1>镜像管理</h1>
 <p class="muted">上传靶机镜像，为每个实验准备可复用的运行环境。</p>
 </div>
 </div>
 <section class="panel upload-panel">
 <div>
-<span class="upload-symbol">↑</span>
 <h2>导入靶机镜像</h2>
 <p class="muted">支持 Docker save 导出的单镜像 .tar 文件，最大 1 GB。</p>
 </div>
@@ -45,7 +43,7 @@ onMounted(load); onBeforeUnmount(() => { disposed = true; clearTimeout(poll) })
 <section class="panel">
 <div class="section-heading">
 <h2>镜像仓库</h2>
-<span class="muted">{{ images.length }} 个镜像</span>
+<span class="count-pill">{{ images.length }} 个镜像</span>
 </div>
 <el-table :data="images" empty-text="上传第一个靶机镜像">
 <el-table-column prop="display_name" label="名称" min-width="150"/>

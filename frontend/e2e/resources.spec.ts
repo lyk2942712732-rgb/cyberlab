@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 test('资源面板按需采集、失败提示、后台暂停与窄屏布局', async ({ page }) => {
   let calls = 0, fail = false
   await page.addInitScript(() => sessionStorage.setItem('cyberlab-token', 'test-token'))
-  await page.route('**/api/**', async route => {
+  await page.route(/^https?:\/\/[^/]+\/api\//, async route => {
     const path = new URL(route.request().url()).pathname
     if (path.endsWith('/auth/me')) return route.fulfill({ json: { data: { id: 'student', username: 'student01', real_name: '测试学生', role: 'STUDENT' } } })
     if (path.endsWith('/metrics')) {
