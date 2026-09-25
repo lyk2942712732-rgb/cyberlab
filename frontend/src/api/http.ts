@@ -1,6 +1,10 @@
 import axios, { type AxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
+import { mockGet } from './mock'
 declare module 'axios' { interface AxiosRequestConfig { silentError?: boolean } }
+
+// Offline UI preview: VITE_MOCK=1 serves static fixtures instead of the API.
+const mocked = () => Boolean((import.meta as unknown as { env?: Record<string, string> }).env?.VITE_MOCK)
 
 const http = axios.create({ baseURL: '/api', timeout: 30000 })
 http.interceptors.request.use(config => {
@@ -17,7 +21,7 @@ http.interceptors.response.use(response => response, error => {
   }
   return Promise.reject(error)
 })
-export async function get<T>(url: string, config?: AxiosRequestConfig): Promise<T> { return (await http.get(url, config)).data.data }
+export async function get<T>(url: string, config?: AxiosRequestConfig): Promise<T> { if (mocked()) return mockGet(url) as T; return (await http.get(url, config)).data.data }
 export async function post<T>(url: string, data?: unknown): Promise<T> { return (await http.post(url, data)).data.data }
 export async function put<T>(url: string, data?: unknown): Promise<T> { return (await http.put(url, data)).data.data }
 export async function remove(url: string): Promise<void> { await http.delete(url) }

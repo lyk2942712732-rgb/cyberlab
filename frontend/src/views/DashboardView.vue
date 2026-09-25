@@ -68,23 +68,23 @@ onMounted(load)
             <circle cx="150" cy="140" r="78" stroke="currentColor" opacity=".8"/>
             <path id="link-h" d="M40 140H102M198 140H258" stroke="currentColor"/>
             <path id="link-v" d="M150 34V92M150 188V246" stroke="currentColor"/>
-            <rect class="node-core" x="102" y="92" width="96" height="96" rx="14" fill="#123226" stroke="#3d6354"/>
-            <path d="M126 126L146 141L126 156M156 157H180" stroke="#8fc7ab" stroke-width="4" stroke-linecap="round"/>
-            <rect x="134" y="16" width="32" height="30" rx="7" fill="#1e4437" stroke="#3d6354"/>
-            <path d="M143 31L148 36L158 25" stroke="#7fd4ab" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-            <rect class="node-target" x="242" y="125" width="32" height="30" rx="7" fill="#3a2a12" stroke="#7a5a22"/>
-            <path d="M251 134H266M251 140H262M251 146H266" stroke="#e0a54e" stroke-width="2" stroke-linecap="round"/>
-            <rect x="26" y="125" width="32" height="30" rx="7" fill="#1e4437" stroke="#3d6354"/>
-            <path d="M35 140H50M45 134L51 140L45 146" stroke="#7fd4ab" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <rect x="134" y="234" width="32" height="30" rx="7" fill="#1e4437" stroke="#3d6354"/>
-            <circle cx="150" cy="249" r="6" fill="none" stroke="#7fd4ab" stroke-width="2"/>
-            <circle cx="42" cy="140" r="3.5" fill="#7fd4ab">
+            <rect class="node-core" x="102" y="92" width="96" height="96" rx="14" fill="#0e241d" stroke="#2f6b52"/>
+            <path d="M126 126L146 141L126 156M156 157H180" stroke="#6ee7b7" stroke-width="4" stroke-linecap="round"/>
+            <rect x="134" y="16" width="32" height="30" rx="7" fill="#14382d" stroke="#2f6b52"/>
+            <path d="M143 31L148 36L158 25" stroke="#6ee7b7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect class="node-target" x="242" y="125" width="32" height="30" rx="7" fill="#2b1d07" stroke="#a1761b"/>
+            <path d="M251 134H266M251 140H262M251 146H266" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"/>
+            <rect x="26" y="125" width="32" height="30" rx="7" fill="#14382d" stroke="#2f6b52"/>
+            <path d="M35 140H50M45 134L51 140L45 146" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="134" y="234" width="32" height="30" rx="7" fill="#14382d" stroke="#2f6b52"/>
+            <circle cx="150" cy="249" r="6" fill="none" stroke="#6ee7b7" stroke-width="2"/>
+            <circle cx="42" cy="140" r="3.5" fill="#34d399">
               <animateMotion dur="2.4s" repeatCount="indefinite" path="M42 140H102" begin="0s"/>
             </circle>
-            <circle cx="198" cy="140" r="3.5" fill="#e0a54e">
+            <circle cx="198" cy="140" r="3.5" fill="#fbbf24">
               <animateMotion dur="2.4s" repeatCount="indefinite" path="M198 140H258" begin="1.2s"/>
             </circle>
-            <circle cx="150" cy="46" r="3.5" fill="#7fd4ab">
+            <circle cx="150" cy="46" r="3.5" fill="#34d399">
               <animateMotion dur="2.4s" repeatCount="indefinite" path="M150 46V92" begin=".6s"/>
             </circle>
           </svg>
