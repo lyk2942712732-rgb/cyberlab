@@ -41,7 +41,7 @@ class FakeRuntime:
     def stop_container(self, identifier: str) -> None:
         self.states[identifier] = "exited"
 
-    def start_capture(self, identifier: str, session_id: str, generation: int) -> None:
+    def start_capture(self, identifier: str, session_id: str, generation: int, cancelled=None) -> None:
         if self.containers[identifier].instance_type != "KALI":
             return
         self.captures[identifier] = (session_id, generation)

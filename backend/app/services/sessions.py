@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import aware, utcnow
 from app.core.security import token
-from app.models import ACTIVE_STATUSES, LabInstance, LabSession, LabTemplate, Submission, TargetImage, User
+from app.core.session_control import stop_requested
+from app.models import ACTIVE_STATUSES, LabInstance, LabSession, LabTemplate, SessionStopRequest, Submission, TargetImage, User
 from app.repositories.catalog import Repository, public
 
 
@@ -30,7 +31,10 @@ class SessionService:
         instances = self.repo.list(LabInstance, LabInstance.session_id == session.id)
         target = next((i for i in instances if i.instance_type == "TARGET" and i.status != "removed"), None)
         lab = self.repo.get(LabTemplate, session.lab_template_id)
-        return {**public(session), "lab_name": lab.name, "lab": public(lab), "instances": [public(i) for i in instances], "target_ip": target.ip_address if target else None}
+        data = {**public(session), "lab_name": lab.name, "lab": public(lab), "instances": [public(i) for i in instances], "target_ip": target.ip_address if target else None}
+        if session.status in ACTIVE_STATUSES and stop_requested(self.db, session.id):
+            data["status"] = "STOPPING"
+        return data
 
     def start(self, lab_id: str, user: User) -> dict:
         if user.role != "STUDENT":
@@ -64,9 +68,22 @@ class SessionService:
         return self.describe(session)
 
     def command(self, identifier: str, user: User, action: str) -> dict:
+        if action == "stop":
+            # Provisioning holds the session row while talking to Docker. Write
+            # cancellation independently so this endpoint can always acknowledge it.
+            session = self.owned(identifier, user)
+            if session.status not in ("DESTROYED", "FAILED") and not stop_requested(self.db, identifier):
+                self.db.add(SessionStopRequest(session_id=identifier))
+                try:
+                    self.db.commit()
+                except IntegrityError:
+                    self.db.rollback()
+                    if not stop_requested(self.db, identifier):
+                        raise
+            return self.describe(session)
         session = self.owned(identifier, user, lock=True)
         if action == "reset":
-            if session.status != "READY" or aware(session.expires_at) <= utcnow():
+            if session.status != "READY" or aware(session.expires_at) <= utcnow() or stop_requested(self.db, identifier):
                 raise HTTPException(409, "仅可重置尚未过期的就绪实验")
             session.status = "RESETTING"
         else:
@@ -80,7 +97,7 @@ class SessionService:
 
     def desktop_ticket(self, identifier: str, user: User) -> dict:
         session = self.owned(identifier, user)
-        if session.status != "READY" or aware(session.expires_at) <= utcnow():
+        if session.status != "READY" or aware(session.expires_at) <= utcnow() or stop_requested(self.db, identifier):
             raise HTTPException(409, "桌面尚未就绪或实验已到期")
         value = token(user.id, "desktop", minutes=2, sid=session.id, gen=session.generation, jti=str(uuid.uuid4()))
         return {"ticket": value, "desktop_url": f"/desktop/{session.id}", "expires_in": 120}
@@ -89,7 +106,7 @@ class SessionService:
         session = self.owned(identifier, user, lock=True)
         if session.user_id != user.id:
             raise HTTPException(403, "只能提交自己的实验")
-        if session.status != "READY" or aware(session.expires_at) <= utcnow():
+        if session.status != "READY" or aware(session.expires_at) <= utcnow() or stop_requested(self.db, identifier):
             raise HTTPException(409, "实验未就绪或已结束")
         lab = self.repo.get(LabTemplate, session.lab_template_id)
         correct = hmac.compare_digest(flag.encode(), lab.flag.encode())

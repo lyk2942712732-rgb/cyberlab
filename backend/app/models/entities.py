@@ -110,6 +110,17 @@ class LabSession(Base):
     )
 
 
+class SessionStopRequest(Base):
+    """Durable cancellation independent of the long-held provisioning row lock.
+
+    Deliberately no FK: its key-share check would wait on LabSession FOR UPDATE.
+    Session existence and ownership are checked by the service before insertion.
+    """
+    __tablename__ = "session_stop_requests"
+    session_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class LabInstance(Base):
     __tablename__ = "lab_instances"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)

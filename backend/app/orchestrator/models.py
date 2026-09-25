@@ -35,5 +35,9 @@ class RuntimeFailure(Exception):
     """A runtime error safe for display, without daemon credentials/host paths."""
 
 
+class ProvisionCancelled(RuntimeFailure):
+    """A stop request or expiry interrupted provisioning."""
+
+
 class ImageInUse(RuntimeFailure):
     """An image cannot be removed while containers still reference it."""

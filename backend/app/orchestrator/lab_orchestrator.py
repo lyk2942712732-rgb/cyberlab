@@ -5,9 +5,10 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import aware, utcnow
+from app.core.session_control import stop_requested
 from app.models import LabInstance, LabSession, LabTemplate, TargetImage
 from app.orchestrator.base import RuntimeProvider
-from app.orchestrator.models import ContainerSpec, RuntimeFailure
+from app.orchestrator.models import ContainerSpec, ProvisionCancelled, RuntimeFailure
 from app.orchestrator.network_manager import NetworkManager
 
 log = logging.getLogger(__name__)
@@ -45,12 +46,15 @@ class LabOrchestrator:
         log.info("Session destroyed session=%s", session.id)
 
     def provision(self, db: Session, session: LabSession) -> None:
+        def cancelled():
+            return aware(session.expires_at) <= utcnow() or stop_requested(db, session.id)
+
         try:
             # Retry/reset always first removes previous generation, including unlinked
             # resources discovered by labels after a controller crash.
             self.cleanup(db, session)
             db.execute(delete(LabInstance).where(LabInstance.session_id == session.id))
-            if aware(session.expires_at) <= utcnow():
+            if cancelled():
                 self.stop(db, session)
                 return
             lab = db.get(LabTemplate, session.lab_template_id)
@@ -67,6 +71,8 @@ class LabOrchestrator:
             ]
             identifiers = []
             for spec in specs:
+                if cancelled():
+                    raise ProvisionCancelled("实验启动已取消")
                 runtime_id = self.runtime.create_container(spec)
                 identifiers.append(runtime_id)
                 db.add(LabInstance(session_id=session.id, instance_type=spec.instance_type, runtime_id=runtime_id, container_name=spec.name, image=spec.image))
@@ -74,7 +80,7 @@ class LabOrchestrator:
             db.flush()
             deadline = time.monotonic() + settings().health_timeout
             while time.monotonic() < deadline:
-                if aware(session.expires_at) <= utcnow():
+                if cancelled():
                     self.stop(db, session)
                     return
                 states = [self.runtime.inspect_container(identifier) for identifier in identifiers]
@@ -83,13 +89,17 @@ class LabOrchestrator:
                         info = next(s for s in states if s.id == instance.runtime_id)
                         instance.status, instance.ip_address = info.status, info.ip_address
                     session.status, session.error = "READY", None
-                    self.runtime.start_capture(identifiers[0], session.id, session.generation)
+                    self.runtime.start_capture(identifiers[0], session.id, session.generation, cancelled=cancelled)
+                    if cancelled():
+                        raise ProvisionCancelled("实验启动已取消")
                     log.info("Session ready session=%s", session.id)
                     return
                 if any(s.status in ("exited", "dead") for s in states):
                     raise RuntimeFailure("实验容器启动后意外退出")
                 time.sleep(1)
             raise RuntimeFailure("实验健康检查超时，请重试或联系管理员")
+        except ProvisionCancelled:
+            self.stop(db, session)
         except Exception as exc:
             log.exception("Session provisioning failed session=%s", session.id)
             session.error = str(exc) if isinstance(exc, RuntimeFailure) else "实验环境创建失败，请联系管理员检查运行服务"
@@ -103,7 +113,7 @@ class LabOrchestrator:
                 session.status = "STOPPING"
 
     def reconcile(self, db: Session, session: LabSession) -> None:
-        if aware(session.expires_at) <= utcnow() or session.status in ("STOPPING", "FINISHED"):
+        if aware(session.expires_at) <= utcnow() or session.status in ("STOPPING", "FINISHED") or stop_requested(db, session.id):
             self.stop(db, session)
         elif session.status in ("CREATING", "STARTING", "RESETTING"):
             session.generation += 1

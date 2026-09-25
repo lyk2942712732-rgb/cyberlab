@@ -3,9 +3,10 @@ import socket
 import struct
 import time
 from pathlib import Path
+from typing import Callable
 import docker
 from docker.errors import APIError, ImageNotFound, NotFound
-from app.orchestrator.models import ContainerInfo, ContainerSpec, ImageInfo, ImageInUse, RuntimeFailure
+from app.orchestrator.models import ContainerInfo, ContainerSpec, ImageInfo, ImageInUse, ProvisionCancelled, RuntimeFailure
 from app.core.config import settings
 
 log = logging.getLogger(__name__)
@@ -131,7 +132,7 @@ class DockerRuntime:
     def start_container(self, container_id: str) -> None:
         self._container(container_id).start()
 
-    def start_capture(self, container_id: str, session_id: str, generation: int) -> None:
+    def start_capture(self, container_id: str, session_id: str, generation: int, cancelled: Callable[[], bool] | None = None) -> None:
         container = self._container(container_id)
         if container.labels.get("cyberlab.type") != "KALI":
             return
@@ -139,11 +140,13 @@ class DockerRuntime:
         root = f"/var/lib/cyberlab/captures/{session_id}/{generation}"
         deadline = time.monotonic() + 180
         while time.monotonic() < deadline:
-            if container.exec_run(["test", "-f", f"{root}/ready.json"]).exit_code == 0:
-                return
+            if cancelled and cancelled():
+                raise ProvisionCancelled("实验启动已取消")
             if container.exec_run(["test", "-f", f"{root}/recorder-error.log"]).exit_code == 0:
                 error = container.exec_run(["cat", f"{root}/recorder-error.log"]).output.decode(errors="replace")
                 raise RuntimeFailure(f"桌面行为录制启动失败: {error[-2000:]}")
+            if container.exec_run(["test", "-f", f"{root}/ready.json"]).exit_code == 0:
+                return
             time.sleep(1)
         raise RuntimeFailure("桌面行为录制启动超时")
 
