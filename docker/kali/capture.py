@@ -12,29 +12,37 @@ META = Path("/tmp/cyberlab-capture.json")
 
 RECORDER = r'''
 import json, os, signal, sys, time, traceback
+from functools import partial
 from pathlib import Path
 from threading import Event
 from openadapt_capture import Recorder
+import openadapt_capture.recorder as recorder_module
+
+# The pinned OpenAdapt build defaults to 30 seconds for its worker barrier.
+# Cold Python worker imports and video initialization can exceed that on the
+# teaching VM. Keep this below wait_for_ready and the controller's 180s budget.
+recorder_module._wait_for_tasks_started = partial(
+    recorder_module._wait_for_tasks_started, timeout=90.0)
 
 root = sys.argv[1]
 stop = Event()
 signal.signal(signal.SIGTERM, lambda *_: stop.set())
 signal.signal(signal.SIGINT, lambda *_: stop.set())
-# docker exec starts this detached supervisor without a consumer for its
-# stdio.  OpenAdapt's tqdm progress writers otherwise receive EPIPE during
-# finalization and report a false recording failure.
-devnull = os.open(os.devnull, os.O_WRONLY)
-os.dup2(devnull, 1)
-os.dup2(devnull, 2)
-os.close(devnull)
+# The launcher redirects stdout/stderr to a private per-session log, so
+# detached workers retain startup diagnostics without writing to a closed pipe.
 try:
     with Recorder(root, task_description="CyberLab desktop activity capture",
                   capture_audio=False, capture_video=True, capture_images=True,
                   video_encoding="mpeg4", video_pixel_format="yuv420p",
                   capture_structural_observations=False, screen_capture_fps=5,
                   plot_performance=False) as recorder:
-        if not recorder.wait_for_ready(timeout=180):
-            raise RuntimeError("recorder did not become ready")
+        try:
+            if not recorder.wait_for_ready(timeout=120):
+                raise RuntimeError("recorder did not become ready within 120 seconds")
+        except BaseException:
+            # Persist the reason before __exit__ attempts potentially slow cleanup.
+            Path(root, "recorder-error.log").write_text(traceback.format_exc())
+            raise
         Path(root, "ready.json").write_text(json.dumps({"session_id": recorder.control_session_id}))
         while not stop.wait(1):
             recorder.check_health()
@@ -54,8 +62,13 @@ def start(session: str, generation: int) -> None:
     if not bus:
         raise RuntimeError("XFCE session has no D-Bus address")
     env["DBUS_SESSION_BUS_ADDRESS"] = bus
-    env.update(DISPLAY=":1", XDG_RUNTIME_DIR="/tmp/runtime-student", NO_AT_BRIDGE="0", MOZ_ACCESSIBILITY_ATSPI_ENABLED="1")
-    proc = subprocess.Popen(["/opt/openadapt/bin/python", "-c", RECORDER, str(root)], env=env, start_new_session=True)
+    env.update(DISPLAY=":1", XDG_RUNTIME_DIR="/tmp/runtime-student", NO_AT_BRIDGE="0", MOZ_ACCESSIBILITY_ATSPI_ENABLED="1",
+               LOGURU_LEVEL="WARNING")
+    log_fd = os.open(root / "recorder.log", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(log_fd, "a") as log:
+        proc = subprocess.Popen(["/opt/openadapt/bin/python", "-c", RECORDER, str(root)],
+                                env=env, start_new_session=True,
+                                stdout=log, stderr=subprocess.STDOUT)
     PID.write_text(str(proc.pid))
     META.write_text(json.dumps({"session_id": session, "generation": generation, "root": str(root), "pid": proc.pid}))
 

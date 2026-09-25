@@ -1,5 +1,7 @@
-# Promotion overlay from the pinned, validated OpenAdapt pilot image.
-FROM cyberlab/kali:openadapt-pilot
+# Apply recorder fixes to the installed, validated Kali image without rebuilding
+# its packages. Override the base with a pinned image tag when reproducing it.
+ARG KALI_CAPTURE_BASE=cyberlab/kali:local
+FROM ${KALI_CAPTURE_BASE}
 USER root
 COPY docker/kali/capture.py /usr/local/bin/cyberlab-capture.py
 RUN chmod 755 /usr/local/bin/cyberlab-capture.py && mkdir -p /var/lib/cyberlab/captures && chown -R student:student /var/lib/cyberlab
