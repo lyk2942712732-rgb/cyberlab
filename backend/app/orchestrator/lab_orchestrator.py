@@ -21,15 +21,13 @@ class LabOrchestrator:
 
     def cleanup(self, db: Session, session: LabSession) -> None:
         containers, _ = self.runtime.session_resources(session.id)
-        capture_error = None
         for container in containers:
             try:
-                self.runtime.stop_capture(container)
+                self.runtime.stop_activity(container)
             except Exception as exc:
-                capture_error = capture_error or exc
-                log.exception("Capture finalization failed session=%s container=%s", session.id, container)
-        if capture_error is not None:
-            raise capture_error
+                log.exception("Activity finalization failed session=%s container=%s: %s", session.id, container, exc)
+                # Preserve a visible failure but always reclaim the desktop resources.
+                session.error = "操作记录收尾失败，记录可能不完整"
         self.networks.cleanup(session.id)
         for instance in db.scalars(select(LabInstance).where(LabInstance.session_id == session.id)):
             instance.status = "removed"
@@ -89,7 +87,7 @@ class LabOrchestrator:
                         info = next(s for s in states if s.id == instance.runtime_id)
                         instance.status, instance.ip_address = info.status, info.ip_address
                     session.status, session.error = "READY", None
-                    self.runtime.start_capture(identifiers[0], session.id, session.generation, cancelled=cancelled)
+                    self.runtime.start_activity(identifiers[0], session.id, session.generation, cancelled=cancelled)
                     if cancelled():
                         raise ProvisionCancelled("实验启动已取消")
                     log.info("Session ready session=%s", session.id)

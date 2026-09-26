@@ -2,8 +2,9 @@ import asyncio
 import contextlib
 import hmac
 import logging
+import sqlite3
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Header, HTTPException, WebSocket
+from fastapi import FastAPI, Header, HTTPException, WebSocket, Query
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.desktop import validate_claims, validate_desktop
@@ -14,6 +15,7 @@ from app.orchestrator.worker import Worker
 from app.orchestrator.metrics import ResourceMonitor
 from app.models import LabInstance, LabSession
 from sqlalchemy import select
+from app.orchestrator.activity import events as activity_events
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
@@ -70,6 +72,19 @@ def metrics(identifier: str, authorization: str = Header(default="")):
         instances = [(i.instance_type, i.runtime_id, i.status == "removed") for i in
                      db.scalars(select(LabInstance).where(LabInstance.session_id == identifier))]
         return {"data": app.state.metrics.collect(identifier, session.generation, instances)}
+
+
+@app.get("/internal/sessions/{identifier}/activity")
+def activity(identifier: str, generation: int | None = Query(default=None, ge=0), after: int = Query(default=0, ge=0), authorization: str = Header(default="")):
+    if not hmac.compare_digest(authorization, f"Bearer {settings().orchestrator_secret}"):
+        raise HTTPException(403, "拒绝访问")
+    with SessionLocal() as db:
+        if not db.get(LabSession, identifier):
+            raise HTTPException(404, "实验实例不存在")
+    try:
+        return {"data": activity_events(identifier, generation, after)}
+    except (ValueError, OSError, sqlite3.Error):
+        raise HTTPException(503, "操作记录暂时无法读取") from None
 
 
 @app.websocket("/internal/sessions/{identifier}/desktop")

@@ -14,9 +14,9 @@ class FakeRuntime:
         self.fail_cleanup = False
         self.loaded: list[str] = []
         self.removed_images: list[str] = []
-        self.captures: dict[str, tuple[str, int]] = {}
-        self.finished_captures: list[tuple[str, int]] = []
-        self.fail_capture_stop = False
+        self.activity: dict[str, tuple[str, int]] = {}
+        self.finished_activity: list[tuple[str, int]] = []
+        self.fail_activity_stop = False
 
     def create_network(self, session_id: str) -> str:
         identifier = str(uuid.uuid4())
@@ -41,17 +41,17 @@ class FakeRuntime:
     def stop_container(self, identifier: str) -> None:
         self.states[identifier] = "exited"
 
-    def start_capture(self, identifier: str, session_id: str, generation: int, cancelled=None) -> None:
+    def start_activity(self, identifier: str, session_id: str, generation: int, cancelled=None) -> None:
         if self.containers[identifier].instance_type != "KALI":
             return
-        self.captures[identifier] = (session_id, generation)
+        self.activity[identifier] = (session_id, generation)
 
-    def stop_capture(self, identifier: str) -> None:
+    def stop_activity(self, identifier: str) -> None:
         if self.containers.get(identifier) and self.containers[identifier].instance_type != "KALI":
             return
-        if identifier in self.captures:
-            self.finished_captures.append(self.captures.pop(identifier))
-        if self.fail_capture_stop:
+        if identifier in self.activity:
+            self.finished_activity.append(self.activity.pop(identifier))
+        if self.fail_activity_stop:
             raise RuntimeFailure("recording finalization failed")
 
     def delete_container(self, identifier: str) -> None:

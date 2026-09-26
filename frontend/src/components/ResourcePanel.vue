@@ -10,13 +10,15 @@ interface Metrics {
   network_rx_bytes?: number | null; network_tx_bytes?: number | null
   network_rx_bytes_per_second?: number | null; network_tx_bytes_per_second?: number | null
 }
-interface Snapshot { sampled_at: string; instances: Metrics[] }
+interface Snapshot { sampled_at: string; instances: Metrics[]; activity?: {status: string; events?: number; error?: string; rejected_events?: number; providers?: Record<string, {status: string}>} }
 const props = defineProps<{ sessionId: string; status: string; instanceKey: string }>()
 const open = ref(false), visible = ref(!document.hidden), data = ref<Snapshot>(), error = ref(''), loading = ref(false)
 const active = computed(() => open.value && visible.value && ['STARTING', 'READY'].includes(props.status))
 const rows = computed(() => ['KALI', 'TARGET'].map(kind => data.value?.instances.find(i => i.instance_type === kind) || { instance_type: kind, available: false, status: 'pending', health: 'unknown' }))
 const stateNames: Record<string, string> = { running: '运行中', created: '已创建', exited: '已退出', dead: '已退出', removed: '已回收', paused: '已暂停', restarting: '重启中', pending: '等待实例', unknown: '未知' }
 const healthNames: Record<string, string> = { healthy: '健康', unhealthy: '检查异常', starting: '检查中', not_configured: '未配置健康检查', stopped: '已停止', unknown: '状态未知' }
+const activityNames: Record<string, string> = { running: '正在记录最终操作', starting: '启动中', finished: '已结束', interrupted: '采集中断', unavailable: '暂无操作记录' }
+const partialActivity = computed(() => !!data.value?.activity?.rejected_events || Object.values(data.value?.activity?.providers || {}).some(p => p.status === 'partial'))
 let timer: ReturnType<typeof setTimeout> | undefined, controller: AbortController | undefined, version = 0
 function stop() { version++; clearTimeout(timer); controller?.abort(); controller = undefined; loading.value = false }
 async function refresh() {
@@ -56,7 +58,7 @@ function width(value?: number | null) { return `${Math.min(100, Math.max(0, valu
     <span>{{ open ? '收起 −' : '展开 +' }}</span>
   </button>
   <div v-if="open" id="resource-details" class="resource-details">
-    <p class="resource-note" role="status">{{ error || (!active ? '采集已暂停，实验就绪且页面可见时自动恢复。' : loading && !data ? '正在读取实例状态…' : '每 5 秒更新；CPU 100% 相当于一个虚拟 CPU 的使用量。') }}<span v-if="data"> 采样时间 {{ new Date(data.sampled_at).toLocaleTimeString('zh-CN') }}</span></p>
+    <p class="resource-note" role="status">{{ error || (!active ? '指标刷新已暂停，实验就绪且页面可见时自动恢复。' : loading && !data ? '正在读取实例状态…' : '每 5 秒更新；CPU 100% 相当于一个虚拟 CPU 的使用量。') }}<span v-if="data"> 采样时间 {{ new Date(data.sampled_at).toLocaleTimeString('zh-CN') }}</span></p>
     <div class="resource-grid">
       <article v-for="row in rows" :key="row.instance_type" class="resource-card" :class="{ stale: !!error }">
         <header><strong>{{ row.instance_type === 'KALI' ? 'Kali 桌面' : '实验靶机' }}</strong><span>{{ stateNames[row.status] || row.status }}</span><span class="health-badge" :class="row.health">{{ healthNames[row.health] || '未知' }}</span></header>
@@ -71,7 +73,8 @@ function width(value?: number | null) { return `${Math.min(100, Math.max(0, valu
         </template>
       </article>
     </div>
-    <p class="resource-note">收起面板或切换到后台标签页后暂停采集。健康状态来自容器检查，不代表所有实验功能均正常。</p>
+    <p v-if="data?.activity" class="resource-note" :class="{ 'resource-warning': data.activity.status === 'interrupted' || partialActivity }">操作采集：{{ activityNames[data.activity.status] || '状态未知' }}<span v-if="data.activity.events != null"> · 已保存 {{ data.activity.events }} 条</span><span v-if="partialActivity"> · 部分操作未能完整记录</span><span v-if="data.activity.error"> · {{ data.activity.error }}</span></p>
+    <p class="resource-note">收起面板或切换到后台标签页只暂停指标刷新，不影响操作记录。容器健康与操作采集状态分别显示。</p>
   </div>
 </section>
 </template>

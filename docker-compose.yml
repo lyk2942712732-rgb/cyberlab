@@ -59,12 +59,10 @@ services:
     <<: *app
     environment:
       <<: *app-env
-      CAPTURE_HOST_DIR: ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/captures
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Generate .env first}
       STUDENT_PASSWORD: ${STUDENT_PASSWORD:?Generate .env first}
     volumes:
       - ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/uploads/target-images:/var/lib/cyberlab/uploads/target-images
-      - ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/captures:/var/lib/cyberlab/captures
     networks: [platform-net, database-net, lab-control-net]
     depends_on:
       migrate: {condition: service_completed_successfully}
@@ -80,11 +78,11 @@ services:
     user: '0:0'
     environment:
       <<: *app-env
-      CAPTURE_HOST_DIR: ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/captures
+      ACTIVITY_HOST_DIR: ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/activity
     command: [uvicorn, app.orchestrator.server:app, --host, 0.0.0.0, --port, '8081', --ws-max-size, '16777216']
     volumes:
       - ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/uploads/target-images:/var/lib/cyberlab/uploads/target-images
-      - ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/captures:/var/lib/cyberlab/captures
+      - ${CYBERLAB_DATA_DIR:-/var/lib/cyberlab}/activity:/var/lib/cyberlab/activity
       - /var/run/docker.sock:/var/run/docker.sock
     networks: [database-net, lab-control-net]
     depends_on:

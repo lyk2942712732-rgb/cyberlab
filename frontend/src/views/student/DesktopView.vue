@@ -82,7 +82,7 @@ async function connect() {
           socket.onmessage = null
           clearTimeout(handshakeTimer)
           rfb = new RFB(screen.value, socket)
-          // Keep Kali's 1440x900 framebuffer stable for OpenAdapt recording.
+          // Keep desktop geometry and operation coordinates stable across viewers.
           // Browser resizing and fullscreen only scale the local canvas.
           rfb.scaleViewport = true
           rfb.resizeSession = false

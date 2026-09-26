@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Form, UploadFile
+from fastapi import APIRouter, Form, UploadFile, Query
+from app.orchestrator.client import OrchestratorClient
 from app.core.security import AdminUser, DB
 from app.models import Chapter, Course, LabSession, LabTemplate, Lesson, TargetImage, User
 from app.repositories.catalog import public
@@ -9,6 +10,12 @@ from app.services.scores import ScoreService
 from app.services.sessions import SessionService
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+@router.get("/lab-sessions/{identifier}/activity")
+def activity(identifier: str, db: DB, user: AdminUser, generation: int | None = Query(default=None, ge=0), after: int = Query(default=0, ge=0)):
+    SessionService(db).owned(identifier, user)
+    return {"data": OrchestratorClient().session_activity(identifier, generation, after)}
 
 
 @router.get("/dashboard")

@@ -119,16 +119,13 @@ def test_cleanup_failure_stays_pending_until_retry(db, lab, users, runtime):
     assert session.status == "DESTROYED" and not runtime.containers
 
 
-def test_capture_finalization_failure_keeps_resources_for_retry(db, lab, users, runtime):
+def test_activity_failure_does_not_leak_desktop_resources(db, lab, users, runtime):
     session = start_ready(db, lab, users["student01"], runtime)
     SessionService(db).command(session.id, users["student01"], "stop")
-    runtime.fail_capture_stop = True
-    with pytest.raises(Exception):
-        LabOrchestrator(runtime).reconcile(db, session)
-    assert session.status == "STOPPING" and runtime.containers
-    runtime.fail_capture_stop = False
+    runtime.fail_activity_stop = True
     LabOrchestrator(runtime).reconcile(db, session)
     assert session.status == "DESTROYED" and not runtime.containers
+    assert "操作记录收尾失败" in session.error
 
 
 def test_every_flag_attempt_is_recorded_and_score_cannot_regress(client, headers, db, users, lab, runtime):

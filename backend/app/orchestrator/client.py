@@ -29,3 +29,16 @@ class OrchestratorClient:
                 detail = "镜像删除失败"
             raise HTTPException(response.status_code, detail)
         return response.json()["data"]
+
+    def session_activity(self, identifier: str, generation: int | None, after: int) -> dict:
+        base = settings().orchestrator_url.replace("ws://", "http://").replace("wss://", "https://")
+        params = {"after": after}
+        if generation is not None:
+            params["generation"] = generation
+        try:
+            response = httpx.get(f"{base}/internal/sessions/{identifier}/activity", params=params,
+                                 headers={"Authorization": f"Bearer {settings().orchestrator_secret}"}, timeout=10)
+            response.raise_for_status()
+            return response.json()["data"]
+        except (httpx.HTTPError, ValueError, KeyError):
+            raise HTTPException(503, "操作记录暂时无法读取") from None

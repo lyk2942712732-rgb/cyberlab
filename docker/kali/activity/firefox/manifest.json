@@ -1,0 +1,11 @@
+{
+  "manifest_version": 2,
+  "name": "CyberLab 实验操作记录",
+  "version": "1.0.0",
+  "description": "记录实验网页中完成的输入、提交与点击，不录屏、不记录逐键过程。",
+  "browser_specific_settings": {"gecko": {"id": "activity@cyberlab.local"}},
+  "permissions": ["nativeMessaging", "webNavigation", "tabs", "<all_urls>"],
+  "background": {"scripts": ["background.js"]},
+  "browser_action": {"default_title": "实验操作记录"},
+  "content_scripts": [{"matches": ["<all_urls>"], "js": ["content.js"], "all_frames": true, "run_at": "document_start"}]
+}

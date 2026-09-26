@@ -17,7 +17,11 @@ def test_docker_network_has_no_external_gateway_or_control_plane_attachment():
 
 
 @pytest.mark.parametrize("kind", ["KALI", "TARGET"])
-def test_container_policy_cannot_be_overridden_by_image(kind):
+def test_container_policy_cannot_be_overridden_by_image(kind, tmp_path, monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings(), 'activity_dir', str(tmp_path))
+    monkeypatch.setattr(settings(), 'activity_host_dir', '/host/activity')
+    monkeypatch.setattr('app.orchestrator.docker_runtime.os.chown', lambda *args: None, raising=False)
     client = MagicMock()
     runtime = DockerRuntime(client)
     runtime.create_container(ContainerSpec("safe-name", "sha256:fixed", "isolated-net", kind, "session-uuid", 1.25, 512))
@@ -28,7 +32,11 @@ def test_container_policy_cannot_be_overridden_by_image(kind):
     assert options["pids_limit"] == (512 if kind == "KALI" else 256)
     assert options["cap_drop"] == ["ALL"]
     assert options["security_opt"] == ["no-new-privileges:true"]
-    assert not any(key in options for key in ("volumes", "mounts", "ports", "devices", "network_mode"))
+    assert not any(key in options for key in ("mounts", "ports", "devices", "network_mode"))
+    if kind == 'KALI':
+        assert options['volumes'] == {'/host/activity/session-uuid': {'bind': '/var/lib/cyberlab/activity/session-uuid', 'mode': 'rw'}}
+    else:
+        assert options['volumes'] == {}
 
 
 def test_image_removal_never_uses_force():

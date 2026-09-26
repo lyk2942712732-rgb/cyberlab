@@ -1,6 +1,7 @@
 """On-demand Docker counters. No exec probes, host process lists or environment data."""
 import threading
 import time
+from app.orchestrator.activity import state as activity_state
 from datetime import datetime, timezone
 
 
@@ -85,6 +86,10 @@ class ResourceMonitor:
                     except Exception:
                         row.update(status="unknown", health="unknown", error="暂时无法读取实例指标")
                 rows.append(row)
-            result = {"sampled_at": datetime.now(timezone.utc).isoformat(), "interval_seconds": 5, "instances": rows}
+            try:
+                activity = activity_state(identifier)
+            except ValueError:
+                activity = {"status": "unavailable"}
+            result = {"sampled_at": datetime.now(timezone.utc).isoformat(), "interval_seconds": 5, "instances": rows, "activity": activity}
             self._sessions[key] = (time.monotonic(), result)
             return result

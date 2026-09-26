@@ -1,0 +1,10 @@
+<!doctype html>
+<html><head><title>Disposable desktop performance test</title></head>
+<body style="margin:0;background:#111"><div id="desktop" style="width:1440px;height:900px"></div>
+<script type="module">
+import RFB from '@novnc/novnc';
+const port = Number(new URL(location.href).searchParams.get('port') || 18999);
+const rfb = new RFB(document.querySelector('#desktop'), `ws://127.0.0.1:${port}`);
+rfb.resizeSession = false;
+rfb.addEventListener('connect', () => document.body.dataset.connected = 'true');
+</script></body></html>

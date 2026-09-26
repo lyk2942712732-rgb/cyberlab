@@ -1,8 +1,9 @@
 import logging
+import json
+import os
 import socket
 import struct
-import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Callable
 import docker
 from docker.errors import APIError, ImageNotFound, NotFound
@@ -113,6 +114,15 @@ class DockerRuntime:
     def create_container(self, spec: ContainerSpec) -> str:
         if not self.image_exists(spec.image):
             raise RuntimeFailure("实验所需镜像不存在，请联系教学管理员")
+        volumes = {}
+        if spec.instance_type == "KALI":
+            # A student container sees only its own journal directory.
+            root = Path(settings().activity_dir) / spec.session_id
+            root.mkdir(parents=True, exist_ok=True)
+            os.chown(root, 1000, 1000)
+            root.chmod(0o700)
+            volumes[str(PurePosixPath(settings().activity_host_dir) / spec.session_id)] = {
+                "bind": f"/var/lib/cyberlab/activity/{spec.session_id}", "mode": "rw"}
         container = self.client.containers.create(
             image=spec.image, name=spec.name, network=spec.network_id,
             labels={**MANAGED, SESSION_LABEL: spec.session_id, "cyberlab.type": spec.instance_type},
@@ -125,38 +135,39 @@ class DockerRuntime:
             security_opt=["no-new-privileges:true"], privileged=False,
             dns=["127.0.0.1"], shm_size="256m", restart_policy={"Name": "no"},
             log_config=docker.types.LogConfig(type="json-file", config={"max-size": "10m", "max-file": "2"}),
-            volumes={settings().capture_host_dir: {"bind": "/var/lib/cyberlab/captures", "mode": "rw"}},
+            volumes=volumes,
         )
         return container.id
 
     def start_container(self, container_id: str) -> None:
         self._container(container_id).start()
 
-    def start_capture(self, container_id: str, session_id: str, generation: int, cancelled: Callable[[], bool] | None = None) -> None:
+    def start_activity(self, container_id: str, session_id: str, generation: int, cancelled: Callable[[], bool] | None = None) -> None:
         container = self._container(container_id)
         if container.labels.get("cyberlab.type") != "KALI":
             return
-        container.exec_run(["python3", "/usr/local/bin/cyberlab-capture.py", "start", session_id, str(generation)], detach=True)
-        root = f"/var/lib/cyberlab/captures/{session_id}/{generation}"
-        deadline = time.monotonic() + 180
-        while time.monotonic() < deadline:
-            if cancelled and cancelled():
-                raise ProvisionCancelled("实验启动已取消")
-            if container.exec_run(["test", "-f", f"{root}/recorder-error.log"]).exit_code == 0:
-                error = container.exec_run(["cat", f"{root}/recorder-error.log"]).output.decode(errors="replace")
-                raise RuntimeFailure(f"桌面行为录制启动失败: {error[-2000:]}")
-            if container.exec_run(["test", "-f", f"{root}/ready.json"]).exit_code == 0:
-                return
-            time.sleep(1)
-        raise RuntimeFailure("桌面行为录制启动超时")
-
-    def stop_capture(self, container_id: str) -> None:
-        container = self._container(container_id)
-        if container.labels.get("cyberlab.type") != "KALI":
-            return
-        result = container.exec_run(["python3", "/usr/local/bin/cyberlab-capture.py", "stop"])
+        if cancelled and cancelled():
+            raise ProvisionCancelled("实验启动已取消")
+        result = container.exec_run(["/usr/bin/python3", "/usr/local/lib/cyberlab-activity/agent.py", "start", session_id, str(generation), str(settings().activity_max_mb)])
         if result.exit_code != 0:
-            raise RuntimeFailure("桌面行为录制收尾失败")
+            raise RuntimeFailure("操作采集启动失败: " + result.output.decode(errors="replace")[-1000:])
+
+    def stop_activity(self, container_id: str) -> None:
+        container = self._container(container_id)
+        if container.labels.get("cyberlab.type") != "KALI":
+            return
+        if not container.attrs["State"].get("Running"):
+            return
+        result = container.exec_run(["/usr/bin/python3", "/usr/local/lib/cyberlab-activity/agent.py", "stop"])
+        if result.exit_code != 0:
+            raise RuntimeFailure("操作采集收尾失败")
+
+    def activity_status(self, container_id: str) -> dict:
+        container = self._container(container_id)
+        result = container.exec_run(["/usr/bin/python3", "/usr/local/lib/cyberlab-activity/agent.py", "status"])
+        if result.exit_code != 0:
+            return {"status": "interrupted", "error": "无法读取操作采集状态"}
+        return json.loads(result.output)
 
     def stop_container(self, container_id: str) -> None:
         try:
