@@ -91,5 +91,17 @@ class FakeRuntime:
     def managed_session_ids(self) -> set[str]:
         return set(self.networks.values()) | {c.session_id for c in self.containers.values()}
 
-    def open_console(self, container_id: str):
-        raise NotImplementedError("desktop wire protocol is covered by the Docker integration checklist")
+    def image_id(self, image: str) -> str | None:
+        return image if image in self.images else None
+
+    def parked_containers(self, image_id: str | None = None, healthy_only: bool = True) -> list[tuple[str, str]]:
+        return []
+
+    def claim_container(self, container_id: str, network_id: str) -> None:
+        pass
+
+    def prune_warm_networks(self) -> None:
+        pass
+
+    def disconnect_desktop(self, container_id: str) -> None:
+        pass

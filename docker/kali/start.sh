@@ -9,14 +9,15 @@ cleanup() {
   done
 }
 trap cleanup EXIT INT TERM
-# VNC listens only inside this container. The trusted controller uses a fixed
-# Docker exec transport; no VNC/noVNC port is published on the host/network.
+# VNC stays loopback-only inside the container. websockify binds 0.0.0.0 so
+# nginx can reach it on the internal desktop network; no port is published to
+# the host, and nginx only proxies after a one-shot ticket check.
 Xtigervnc :1 -geometry 1440x900 -depth 24 -s 0 -localhost yes -SecurityTypes None -rfbport 5901 &
 vnc_pid=$!
 python3 /usr/local/bin/check-desktop.py --wait
 xsetroot -solid '#18332d'
 dbus-run-session -- xfce4-session &
 xfce_pid=$!
-websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5901 &
+websockify --web=/usr/share/novnc 0.0.0.0:6080 127.0.0.1:5901 &
 web_pid=$!
 wait "$vnc_pid"

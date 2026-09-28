@@ -2,6 +2,7 @@ import json
 import sqlite3
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import timedelta
 from unittest.mock import Mock
 import pytest
@@ -9,6 +10,18 @@ from app.core.config import settings
 from app.core.db import utcnow
 from app.models import LabSession
 from app.orchestrator.activity import state, events
+
+
+@pytest.fixture(autouse=True)
+def _no_warm_slot_lookup(monkeypatch):
+    # Journal pagination is filesystem-only; warm-slot resolution needs a DB.
+    @contextmanager
+    def factory():
+        class _Stub:
+            def scalars(self, *_args, **_kwargs):
+                return []
+        yield _Stub()
+    monkeypatch.setattr("app.orchestrator.activity.SessionLocal", factory)
 
 
 def test_journal_generations_pagination_and_stale_heartbeat(tmp_path, monkeypatch):

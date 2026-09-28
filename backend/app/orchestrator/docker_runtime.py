@@ -1,8 +1,6 @@
 import logging
 import json
 import os
-import socket
-import struct
 from pathlib import Path, PurePosixPath
 from typing import Callable
 import docker
@@ -15,68 +13,9 @@ MANAGED = {"cyberlab.managed": "true"}
 SESSION_LABEL = "cyberlab.session"
 WARM_LABEL = "cyberlab.warm"
 WARM_NET_PREFIX = "lab-net-warm-"
-
-# This fixed program only forwards stdin/stdout to the loopback VNC socket inside Kali.
-# It accepts no user commands, hostnames, paths or ports.
-VNC_RELAY = """
-import os, select, socket, sys
-s = socket.create_connection(('127.0.0.1', 5901), timeout=10)
-s.settimeout(None)
-while True:
-    ready, _, _ = select.select([s, sys.stdin.buffer], [], [])
-    if s in ready:
-        data = s.recv(65536)
-        if not data: break
-        sys.stdout.buffer.write(data)
-        sys.stdout.buffer.flush()
-    if sys.stdin.buffer in ready:
-        data = os.read(0, 65536)
-        if not data: break
-        s.sendall(data)
-s.close()
-"""
-
-
-class DockerConsole:
-    """Decode Docker's non-TTY multiplexing without altering binary VNC data."""
-
-    def __init__(self, connection):
-        self.connection = connection
-        self.socket = getattr(connection, "_sock", connection)
-        self.socket.settimeout(None)
-
-    def _exact(self, length: int) -> bytes:
-        result = bytearray()
-        while len(result) < length:
-            chunk = self.socket.recv(length - len(result))
-            if not chunk:
-                return b""
-            result.extend(chunk)
-        return bytes(result)
-
-    def read(self) -> bytes:
-        while header := self._exact(8):
-            stream, length = header[0], struct.unpack(">I", header[4:])[0]
-            if length > 16 * 1024 * 1024:
-                raise RuntimeFailure("桌面数据帧过大")
-            data = self._exact(length)
-            if stream == 1 and data:
-                return data
-            if not data and length:
-                return b""
-            # stderr is never mixed into the VNC protocol or returned to browsers.
-        return b""
-
-    def write(self, data: bytes) -> None:
-        self.socket.sendall(data)
-
-    def close(self) -> None:
-        try:
-            self.socket.shutdown(socket.SHUT_RDWR)
-        except OSError:
-            pass
-        self.connection.close()
-
+# Shared internal network carrying only nginx and Kali aliases. Desktop frames
+# flow browser -> nginx -> container websockify, with no Python relay in between.
+DESKTOP_NET = "cyberlab-desktop-net"
 
 class DockerRuntime:
     def __init__(self, client=None, timeout=120):
@@ -155,6 +94,10 @@ class DockerRuntime:
             healthcheck=healthcheck,
             volumes=volumes,
         )
+        if spec.instance_type == "KALI" and not spec.parked:
+            # A fresh desktop joins the shared network immediately; a parked one
+            # waits until a session claims it (claim_container).
+            self.client.api.connect_container_to_network(container.id, DESKTOP_NET, aliases=[spec.name])
         return container.id
 
     def start_container(self, container_id: str) -> None:
@@ -203,8 +146,18 @@ class DockerRuntime:
             raise RuntimeFailure("预热桌面尚未就绪")
         parked = [name for name in obj.attrs["NetworkSettings"]["Networks"] if name.startswith(WARM_NET_PREFIX)]
         self.client.api.connect_container_to_network(container_id, network_id)
+        if obj.labels.get("cyberlab.type") == "KALI":
+            # Container names are unique; the alias lets nginx route the
+            # websockify stream by the name returned by the ticket check.
+            self.client.api.connect_container_to_network(container_id, DESKTOP_NET, aliases=[obj.name])
         for name in parked:
             self.client.api.disconnect_container_from_network(container_id, self.client.networks.get(name).id)
+
+    def disconnect_desktop(self, container_id: str) -> None:
+        try:
+            self.client.api.disconnect_container_from_network(container_id, DESKTOP_NET)
+        except (NotFound, APIError):
+            pass
 
     def prune_warm_networks(self) -> None:
         for network in self.client.networks.list(filters={"label": "cyberlab.managed=true"}):
@@ -318,10 +271,3 @@ class DockerRuntime:
         networks = self.client.networks.list(filters={"label": "cyberlab.managed=true"})
         return {x for x in [*(c.labels.get(SESSION_LABEL) for c in objects), *(n.attrs.get("Labels", {}).get(SESSION_LABEL) for n in networks)] if x}
 
-    def open_console(self, container_id: str) -> DockerConsole:
-        obj = self._container(container_id)
-        if obj.labels.get("cyberlab.type") != "KALI":
-            raise RuntimeFailure("此实例不支持桌面连接")
-        executable = self.client.api.exec_create(obj.id, ["python3", "-u", "-c", VNC_RELAY], stdin=True, stdout=True, stderr=True, tty=False)
-        connection = self.client.api.exec_start(executable["Id"], socket=True, tty=False)
-        return DockerConsole(connection)

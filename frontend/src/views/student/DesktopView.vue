@@ -5,7 +5,7 @@ import RFB from '@novnc/novnc'
 import { post } from '../../api/http'
 const route = useRoute(), screen = ref<HTMLDivElement>(), status = ref('正在连接桌面…'), connected = ref(false), connecting = ref(false)
 const clipboardOpen = ref(false), clipboardDraft = ref(''), remoteClipboard = ref(''), clipboardHint = ref('支持双向文本复制'), clipboardBusy = ref(false)
-let rfb: RFB | undefined, ws: WebSocket | undefined, disposed = false, handshakeTimer: ReturnType<typeof setTimeout> | undefined
+let rfb: RFB | undefined, disposed = false
 let suppressPasteKeyUp = false
 let manualClipboardReady = false
 function sendClipboard(manual = true) {
@@ -64,44 +64,29 @@ function receiveClipboard(event: Event) {
 async function connect() {
   if (connecting.value) return
   connecting.value = true; connected.value = false; status.value = '正在连接桌面…'
-  rfb?.disconnect(); ws?.close(); clearTimeout(handshakeTimer)
+  rfb?.disconnect()
   try {
     const { ticket } = await post<{ ticket: string }>(`/lab-sessions/${route.params.id}/desktop-ticket`)
     if (disposed) return
-    const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/lab-sessions/${route.params.id}/desktop`)
-    socket.binaryType = 'arraybuffer'
-    ws = socket
-    handshakeTimer = setTimeout(() => { socket.close(); connecting.value = false; status.value = '连接超时，请重试。' }, 20000)
-    socket.onopen = () => socket.send(JSON.stringify({ ticket }))
-    socket.onerror = () => { connecting.value = false; status.value = '桌面连接失败，请确认实验处于就绪状态。' }
-    socket.onclose = () => { clearTimeout(handshakeTimer); connected.value = false; connecting.value = false; status.value = '桌面连接已断开。实验到期或重置后连接会自动关闭。' }
-    socket.onmessage = event => {
-      if (typeof event.data !== 'string') return
-      try {
-        if (JSON.parse(event.data).ready && screen.value) {
-          socket.onmessage = null
-          clearTimeout(handshakeTimer)
-          rfb = new RFB(screen.value, socket)
-          // Keep desktop geometry and operation coordinates stable across viewers.
-          // Browser resizing and fullscreen only scale the local canvas.
-          rfb.scaleViewport = true
-          rfb.resizeSession = false
-          // Tight encoding with moderate compression cuts relay bandwidth on
-          // software-rendered desktops without changing remote geometry.
-          const tuned = rfb as RFB & { qualityLevel: number; compressionLevel: number }
-          tuned.qualityLevel = 5
-          tuned.compressionLevel = 6
-          rfb.addEventListener('clipboard', receiveClipboard)
-          rfb.addEventListener('connect', () => { connected.value = true; connecting.value = false })
-          rfb.addEventListener('disconnect', () => { connected.value = false; connecting.value = false; status.value = '桌面连接已断开，可尝试重新连接。' })
-          rfb.addEventListener('securityfailure', () => { status.value = '桌面握手失败，请联系教学管理员。'; connecting.value = false })
-        }
-      } catch { socket.close() }
-    }
+    // The stream now goes straight to websockify in the Kali container. The
+    // one-shot ticket rides as a websocket subprotocol (browsers cannot set
+    // custom headers); nginx validates it before any desktop byte is proxied.
+    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/lab-sessions/${route.params.id}/desktop`
+    if (!screen.value) return
+    rfb = new RFB(screen.value, url, { wsProtocols: ['cyberlab-ticket', ticket] })
+    const tuned = rfb as RFB & { qualityLevel: number; compressionLevel: number }
+    tuned.qualityLevel = 5
+    tuned.compressionLevel = 6
+    rfb.scaleViewport = true
+    rfb.resizeSession = false
+    rfb.addEventListener('clipboard', receiveClipboard)
+    rfb.addEventListener('connect', () => { connected.value = true; connecting.value = false; status.value = '正在连接桌面…' })
+    rfb.addEventListener('disconnect', () => { connected.value = false; connecting.value = false; status.value = '桌面连接已断开，可尝试重新连接。' })
+    rfb.addEventListener('securityfailure', () => { status.value = '桌面连接失败：访问凭证被拒绝，请返回实验页重试。'; connecting.value = false })
   } catch { status.value = '无法获取桌面访问凭证，请返回实验页面重试。'; connecting.value = false }
 }
 onMounted(connect)
-onBeforeUnmount(() => { disposed = true; clearTimeout(handshakeTimer); rfb?.disconnect(); ws?.close() })
+onBeforeUnmount(() => { disposed = true; rfb?.disconnect() })
 </script>
 <template>
 <div class="novnc-view">

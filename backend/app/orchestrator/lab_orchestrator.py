@@ -28,6 +28,7 @@ class LabOrchestrator:
                 containers.append(instance.runtime_id)
         for container in containers:
             try:
+                self.runtime.disconnect_desktop(container)
                 self.runtime.stop_activity(container)
             except Exception as exc:
                 log.exception("Activity finalization failed session=%s container=%s: %s", session.id, container, exc)

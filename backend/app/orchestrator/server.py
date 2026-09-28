@@ -1,13 +1,11 @@
 import asyncio
-import contextlib
 import hmac
 import logging
 import sqlite3
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Header, HTTPException, WebSocket, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from app.core.config import settings
 from app.core.db import SessionLocal
-from app.core.desktop import validate_claims, validate_desktop
 from app.orchestrator.docker_runtime import DockerRuntime
 from app.orchestrator.lab_orchestrator import LabOrchestrator
 from app.orchestrator.image_manager import ImageManager
@@ -87,45 +85,3 @@ def activity(identifier: str, generation: int | None = Query(default=None, ge=0)
         raise HTTPException(503, "操作记录暂时无法读取") from None
 
 
-@app.websocket("/internal/sessions/{identifier}/desktop")
-async def desktop(websocket: WebSocket, identifier: str):
-    expected = f"Bearer {settings().orchestrator_secret}"
-    if not hmac.compare_digest(websocket.headers.get("authorization", ""), expected):
-        await websocket.close(code=1008)
-        return
-    channel = None
-    tasks = []
-    try:
-        claims, container = await asyncio.to_thread(validate_desktop, identifier, websocket.headers.get("x-desktop-ticket", ""))
-        channel = await asyncio.to_thread(app.state.runtime.open_console, container)
-        await websocket.accept()
-
-        async def read():
-            while data := await asyncio.to_thread(channel.read):
-                await websocket.send_bytes(data)
-
-        async def write():
-            while True:
-                await asyncio.to_thread(channel.write, await websocket.receive_bytes())
-
-        async def guard():
-            while True:
-                await asyncio.sleep(2)
-                await asyncio.to_thread(validate_claims, identifier, claims)
-
-        tasks = [asyncio.create_task(f()) for f in (read, write, guard)]
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            task.result()
-    except Exception:
-        log.info("Private desktop closed session=%s", identifier)
-    finally:
-        if channel:
-            with contextlib.suppress(Exception):
-                await asyncio.to_thread(channel.close)
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        with contextlib.suppress(Exception):
-            await websocket.close()

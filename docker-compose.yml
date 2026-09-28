@@ -105,13 +105,16 @@ services:
     restart: unless-stopped
     ports: ["127.0.0.1:${HTTP_PORT:-8080}:80"]
     volumes: [./nginx/nginx.conf:/etc/nginx/nginx.conf:ro]
-    networks: [platform-net]
+    # platform-net serves the site; desktop-net carries only noVNC streams to
+    # Kali containers, which attach with a per-container DNS alias.
+    networks: [platform-net, desktop-net]
     depends_on:
       backend: {condition: service_healthy}
       frontend: {condition: service_started}
 
 networks:
   platform-net: {}
+  desktop-net: {internal: true}
   database-net: {internal: true}
   lab-control-net: {internal: true}
 
