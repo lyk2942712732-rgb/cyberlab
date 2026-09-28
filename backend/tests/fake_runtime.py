@@ -105,3 +105,7 @@ class FakeRuntime:
 
     def disconnect_desktop(self, container_id: str) -> None:
         pass
+
+    def owns_container(self, container_id: str, session_id: str) -> bool:
+        spec = self.containers.get(container_id)
+        return spec is not None and spec.session_id == session_id

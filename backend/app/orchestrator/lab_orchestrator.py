@@ -27,6 +27,8 @@ class LabOrchestrator:
         for instance in db.scalars(select(LabInstance).where(LabInstance.session_id == session.id)):
             if instance.container_name and instance.runtime_id not in containers:
                 containers.append(instance.runtime_id)
+        # The session network must not be deleted with the warm container still
+        # attached; owning containers (label or DB row) are removed first.
         for container in containers:
             try:
                 self.runtime.disconnect_desktop(container)

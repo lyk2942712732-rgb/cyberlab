@@ -12,8 +12,13 @@ class NetworkManager:
         # Labels also recover resources created just before a process crash/DB rollback.
         containers, networks = self.runtime.session_resources(session_id)
         errors = []
+        # A claimed warm desktop keeps its parking-slot session label, so the
+        # label scan cannot see it; the stop path passes its runtime id here.
         for container in containers:
+            if not self.runtime.owns_container(container, session_id):
+                continue
             try:
+                self.runtime.disconnect_desktop(container)
                 self.runtime.delete_container(container)
             except Exception as exc:
                 errors.append(exc)

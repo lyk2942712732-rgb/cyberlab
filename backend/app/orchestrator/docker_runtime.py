@@ -217,6 +217,15 @@ class DockerRuntime:
         except NotFound:
             pass
 
+    def owns_container(self, container_id: str, session_id: str) -> bool:
+        # Claimed warm desktops keep the immutable warm-slot session label, so
+        # ownership is their container name; normal containers carry the label.
+        try:
+            labels = self._container(container_id).labels
+        except NotFound:
+            return False
+        return labels.get(SESSION_LABEL) == session_id or labels.get(SESSION_LABEL, "").startswith("warm-")
+
     def inspect_container(self, container_id: str) -> ContainerInfo:
         obj = self._container(container_id)
         state = obj.attrs["State"]
