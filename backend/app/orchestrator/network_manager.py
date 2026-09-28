@@ -8,9 +8,10 @@ class NetworkManager:
     def create(self, session_id: str) -> str:
         return self.runtime.create_network(session_id)
 
-    def cleanup(self, session_id: str) -> None:
+    def cleanup(self, session_id: str, extra_containers: list[str] | None = None) -> None:
         # Labels also recover resources created just before a process crash/DB rollback.
         containers, networks = self.runtime.session_resources(session_id)
+        containers.extend(extra_containers or [])
         errors = []
         # A claimed warm desktop keeps its parking-slot session label, so the
         # label scan cannot see it; the stop path passes its runtime id here.

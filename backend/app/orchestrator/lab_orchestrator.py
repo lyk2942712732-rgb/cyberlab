@@ -41,7 +41,7 @@ class LabOrchestrator:
         # may predate the crash; drop those rows before the label scan so the
         # warm desktop is not mistaken for a leaked resource.
         self._forget_vanished_instances(db, session, containers)
-        self.networks.cleanup(session.id)
+        self.networks.cleanup(session.id, containers)
         for instance in db.scalars(select(LabInstance).where(LabInstance.session_id == session.id)):
             instance.status = "removed"
         session.network_id = None
