@@ -37,10 +37,23 @@ class LabOrchestrator:
                 log.exception("Activity finalization failed session=%s container=%s: %s", session.id, container, exc)
                 # Preserve a visible failure but always reclaim the desktop resources.
                 session.error = "操作记录收尾失败，记录可能不完整"
+        # If activity finalization raised for a vanished container, its DB row
+        # may predate the crash; drop those rows before the label scan so the
+        # warm desktop is not mistaken for a leaked resource.
+        self._forget_vanished_instances(db, session, containers)
         self.networks.cleanup(session.id)
         for instance in db.scalars(select(LabInstance).where(LabInstance.session_id == session.id)):
             instance.status = "removed"
         session.network_id = None
+
+    def _forget_vanished_instances(self, db: Session, session: LabSession, containers: list[str]) -> None:
+        for instance in list(db.scalars(select(LabInstance).where(LabInstance.session_id == session.id))):
+            if instance.status != "running" or instance.runtime_id in containers:
+                continue
+            try:
+                self.runtime.inspect_container(instance.runtime_id)
+            except Exception:
+                db.execute(delete(LabInstance).where(LabInstance.id == instance.id))
 
     def stop(self, db: Session, session: LabSession) -> None:
         session.status = "STOPPING"
