@@ -163,22 +163,29 @@ class DockerRuntime:
     def parked_containers(self, image_id: str | None = None, healthy_only: bool = True) -> list[tuple[str, str]]:
         # Only desktops that are healthy and still isolated on their parking
         # network are claimable; a claimed container keeps the parked label
-        # because Docker labels are immutable.
+        # because Docker labels are immutable. The low-level list avoids a
+        # second inspect per container, and containers that vanish mid-scan
+        # are skipped instead of aborting the whole pool pass.
         filters = {"label": ["cyberlab.managed=true", f"{WARM_LABEL}=parked"]}
         result = []
-        for container in self.client.containers.list(filters=filters):
-            if image_id is not None and container.attrs.get("Image") != image_id:
+        for summary in self.client.api.containers(all=True, filters=filters):
+            container_id = summary["Id"]
+            labels = summary.get("Labels") or {}
+            if image_id is not None and summary.get("ImageID") != image_id:
                 continue
-            state = container.attrs["State"]
-            networks = list(container.attrs["NetworkSettings"]["Networks"])
-            running = bool(state.get("Running"))
-            healthy = state.get("Health", {}).get("Status") == "healthy"
-            parked_net = bool(networks) and all(name.startswith(WARM_NET_PREFIX) for name in networks)
-            if not parked_net or state.get("Status") in ("exited", "dead", "removing"):
+            if summary.get("State") in ("exited", "dead", "removing"):
                 continue
-            if healthy_only and not (running and healthy):
+            networks = list((summary.get("NetworkSettings") or {}).get("Networks") or {})
+            if not networks or not all(name.startswith(WARM_NET_PREFIX) for name in networks):
                 continue
-                result.append((container.id, container.labels.get(SESSION_LABEL, "").removeprefix("warm-")))
+            if healthy_only:
+                try:
+                    state = self.client.api.inspect_container(container_id)["State"]
+                except (NotFound, APIError):
+                    continue
+                if not state.get("Running") or state.get("Health", {}).get("Status") != "healthy":
+                    continue
+            result.append((container_id, labels.get(SESSION_LABEL, "").removeprefix("warm-")))
         return result
 
     def image_id(self, image: str) -> str | None:
@@ -208,7 +215,7 @@ class DockerRuntime:
                     full = self.client.networks.get(network.id)
                     if not full.containers:
                         full.remove()
-                except Exception:
+                except (NotFound, APIError):
                     log.warning("Warm parking network %s could not be removed", network.name)
 
     def start_activity(self, container_id: str, session_id: str, generation: int, cancelled: Callable[[], bool] | None = None) -> None:

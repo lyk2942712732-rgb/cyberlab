@@ -77,8 +77,11 @@ class Worker:
         try:
             runtime = self.orchestrator.runtime
             if target <= 0:
-                for container_id, _slot in runtime.parked_containers():
-                    runtime.delete_container(container_id)
+                for container_id, _slot in runtime.parked_containers(healthy_only=False):
+                    try:
+                        runtime.delete_container(container_id)
+                    except Exception:
+                        log.warning("Parked container %s could not be removed", container_id[:12])
                 runtime.prune_warm_networks()
                 return
             with SessionLocal() as db:
@@ -90,13 +93,19 @@ class Worker:
             # Desktops built from a replaced image are discarded first.
             for container_id, _slot in runtime.parked_containers(healthy_only=False):
                 if container_id not in live_ids:
-                    runtime.delete_container(container_id)
+                    try:
+                        runtime.delete_container(container_id)
+                    except Exception:
+                        log.warning("Stale parked container %s could not be removed", container_id[:12])
             # Starting desktops already occupy a pool slot; counting only
             # healthy ones would create a new Kali on every tick.
             healthy_ids = {pair[0] for pair in runtime.parked_containers(current)}
             ordered = sorted(live, key=lambda pair: pair[0] not in healthy_ids)
             for container_id, _slot in ordered[target:]:
-                runtime.delete_container(container_id)
+                try:
+                    runtime.delete_container(container_id)
+                except Exception:
+                    log.warning("Surplus parked container %s could not be removed", container_id[:12])
             for _ in range(max(0, target - len(ordered))):
                 self._park_kali()
             runtime.prune_warm_networks()
