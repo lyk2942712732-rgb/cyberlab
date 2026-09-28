@@ -189,7 +189,11 @@ class DockerRuntime:
             raise RuntimeFailure("操作采集启动失败: " + result.output.decode(errors="replace")[-1000:])
 
     def stop_activity(self, container_id: str) -> None:
-        container = self._container(container_id)
+        try:
+            container = self._container(container_id)
+        except NotFound:
+            # Cleanup races with container removal; nothing to finalize.
+            return
         if container.labels.get("cyberlab.type") != "KALI":
             return
         if not container.attrs["State"].get("Running"):
