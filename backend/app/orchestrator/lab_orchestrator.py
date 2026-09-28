@@ -1,4 +1,5 @@
 import logging
+import contextlib
 import time
 import uuid
 from sqlalchemy import delete, select
@@ -117,25 +118,22 @@ class LabOrchestrator:
         # unique-constraint race, so concurrent workers cannot double-book it.
         current = self.runtime.image_id(settings().kali_image)
         for container_id, slot in self.runtime.parked_containers(current):
+            nested = db.begin_nested()
             try:
-                with db.begin_nested():
-                    db.add(LabInstance(session_id=session.id, instance_type="KALI", runtime_id=container_id,
-                                      container_name=f"kali-warm-{slot}", image=settings().kali_image))
-                    db.flush()
-            except Exception:
-                log.info("Warm desktop %s was claimed by another session", container_id)
-                continue
-            try:
+                db.add(LabInstance(session_id=session.id, instance_type="KALI", runtime_id=container_id,
+                                  container_name=f"kali-warm-{slot}", image=settings().kali_image))
+                db.flush()
                 self.runtime.claim_container(container_id, session.network_id)
-                log.info("Claimed warm desktop session=%s container=%s", session.id, container_id)
-                return container_id
-            except Exception as exc:
-                log.warning("Warm desktop %s unusable during claim: %s", container_id, exc)
-                db.rollback()
-                try:
-                    self.runtime.delete_container(container_id)
-                except Exception:
-                    log.exception("Failed to discard broken warm desktop %s", container_id)
+                nested.commit()
+            except Exception:
+                # Another worker booked it, or the claim failed; undo only
+                # this savepoint so the outer provisioning transaction stays
+                # usable (a full db.rollback() would poison every later flush).
+                with contextlib.suppress(Exception):
+                    nested.rollback()
+                continue
+            log.info("Claimed warm desktop session=%s container=%s", session.id, container_id)
+            return container_id
         spec = ContainerSpec(f"kali-{uuid.uuid4()}", settings().kali_image, session.network_id, "KALI", session.id, settings().kali_cpu, settings().kali_memory_mb)
         runtime_id = self.runtime.create_container(spec)
         db.add(LabInstance(session_id=session.id, instance_type="KALI", runtime_id=runtime_id, container_name=spec.name, image=spec.image))

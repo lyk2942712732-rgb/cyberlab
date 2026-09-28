@@ -21,6 +21,13 @@ class DockerRuntime:
     def __init__(self, client=None, timeout=120):
         self.client = client or docker.from_env(timeout=timeout)
 
+    def _desktop_net_id(self) -> str:
+        # Compose prefixes the project name onto networks, so resolve the
+        # shared desktop network by its compose label and fall back to the
+        # bare name for non-compose deployments.
+        networks = self.client.networks.list(filters={"label": "com.docker.compose.network=desktop-net"})
+        return networks[0].id if networks else DESKTOP_NET
+
     def resource_snapshot(self, container_id: str, session_id: str) -> tuple[dict, dict]:
         obj = self._container(container_id)
         # Claimed warm desktops keep their parking slot label; the metrics
@@ -97,7 +104,7 @@ class DockerRuntime:
         if spec.instance_type == "KALI" and not spec.parked:
             # A fresh desktop joins the shared network immediately; a parked one
             # waits until a session claims it (claim_container).
-            self.client.api.connect_container_to_network(container.id, DESKTOP_NET, aliases=[spec.name])
+            self.client.api.connect_container_to_network(container.id, self._desktop_net_id(), aliases=[spec.name])
         return container.id
 
     def start_container(self, container_id: str) -> None:
@@ -149,13 +156,13 @@ class DockerRuntime:
         if obj.labels.get("cyberlab.type") == "KALI":
             # Container names are unique; the alias lets nginx route the
             # websockify stream by the name returned by the ticket check.
-            self.client.api.connect_container_to_network(container_id, DESKTOP_NET, aliases=[obj.name])
+            self.client.api.connect_container_to_network(container_id, self._desktop_net_id(), aliases=[obj.name])
         for name in parked:
             self.client.api.disconnect_container_from_network(container_id, self.client.networks.get(name).id)
 
     def disconnect_desktop(self, container_id: str) -> None:
         try:
-            self.client.api.disconnect_container_from_network(container_id, DESKTOP_NET)
+            self.client.api.disconnect_container_from_network(container_id, self._desktop_net_id())
         except (NotFound, APIError):
             pass
 
