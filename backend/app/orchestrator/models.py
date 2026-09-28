@@ -11,6 +11,10 @@ class ContainerSpec:
     cpu: float
     memory_mb: int
     environment: dict[str, str] = field(default_factory=dict)
+    # Warm pool desktops park on a private network and journal directory until
+    # a session claims them; labels are immutable, so ownership moves via DB.
+    parked: bool = False
+    slot: str | None = None
 
 
 @dataclass

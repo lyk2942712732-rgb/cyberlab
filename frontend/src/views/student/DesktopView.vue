@@ -86,6 +86,11 @@ async function connect() {
           // Browser resizing and fullscreen only scale the local canvas.
           rfb.scaleViewport = true
           rfb.resizeSession = false
+          // Tight encoding with moderate compression cuts relay bandwidth on
+          // software-rendered desktops without changing remote geometry.
+          const tuned = rfb as RFB & { qualityLevel: number; compressionLevel: number }
+          tuned.qualityLevel = 5
+          tuned.compressionLevel = 6
           rfb.addEventListener('clipboard', receiveClipboard)
           rfb.addEventListener('connect', () => { connected.value = true; connecting.value = false })
           rfb.addEventListener('disconnect', () => { connected.value = false; connecting.value = false; status.value = '桌面连接已断开，可尝试重新连接。' })

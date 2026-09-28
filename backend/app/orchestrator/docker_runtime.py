@@ -13,6 +13,8 @@ from app.core.config import settings
 log = logging.getLogger(__name__)
 MANAGED = {"cyberlab.managed": "true"}
 SESSION_LABEL = "cyberlab.session"
+WARM_LABEL = "cyberlab.warm"
+WARM_NET_PREFIX = "lab-net-warm-"
 
 # This fixed program only forwards stdin/stdout to the loopback VNC socket inside Kali.
 # It accepts no user commands, hostnames, paths or ports.
@@ -82,7 +84,9 @@ class DockerRuntime:
 
     def resource_snapshot(self, container_id: str, session_id: str) -> tuple[dict, dict]:
         obj = self._container(container_id)
-        if obj.labels.get(SESSION_LABEL) != session_id:
+        # Claimed warm desktops keep their parking slot label; the metrics
+        # endpoint only passes runtime ids owned by this session's DB rows.
+        if obj.labels.get(SESSION_LABEL) != session_id and obj.labels.get(WARM_LABEL) != "parked":
             raise RuntimeFailure("实例不属于当前实验")
         attrs = obj.attrs
         stats = obj.stats(stream=False, one_shot=True) if attrs["State"].get("Running") else {}
@@ -121,16 +125,24 @@ class DockerRuntime:
                        else {"interval": 15_000_000_000, "timeout": 10_000_000_000, "retries": 10})
         volumes = {}
         if spec.instance_type == "KALI":
-            # A student container sees only its own journal directory.
-            root = Path(settings().activity_dir) / spec.session_id
+            if spec.slot:
+                # A parked desktop journals into its slot directory; the claim
+                # row later tells readers where this session's journal landed.
+                root = Path(settings().activity_dir) / "warm" / spec.slot
+                host_root = PurePosixPath(settings().activity_host_dir) / "warm" / spec.slot
+            else:
+                # A student container sees only its own journal directory.
+                root = Path(settings().activity_dir) / spec.session_id
+                host_root = PurePosixPath(settings().activity_host_dir) / spec.session_id
             root.mkdir(parents=True, exist_ok=True)
             os.chown(root, 1000, 1000)
             root.chmod(0o700)
-            volumes[str(PurePosixPath(settings().activity_host_dir) / spec.session_id)] = {
+            volumes[str(host_root)] = {
                 "bind": f"/var/lib/cyberlab/activity/{spec.session_id}", "mode": "rw"}
         container = self.client.containers.create(
             image=spec.image, name=spec.name, network=spec.network_id,
-            labels={**MANAGED, SESSION_LABEL: spec.session_id, "cyberlab.type": spec.instance_type},
+            labels={**MANAGED, SESSION_LABEL: spec.session_id, "cyberlab.type": spec.instance_type,
+                    **({WARM_LABEL: "parked"} if spec.parked else {})},
             environment=spec.environment, detach=True, init=True,
             nano_cpus=int(spec.cpu * 1_000_000_000), mem_limit=f"{spec.memory_mb}m",
             # Firefox uses many threads, all counted by the pids cgroup.
@@ -147,6 +159,48 @@ class DockerRuntime:
 
     def start_container(self, container_id: str) -> None:
         self._container(container_id).start()
+
+    def parked_containers(self, image_id: str | None = None) -> list[tuple[str, str]]:
+        # Only desktops that are healthy and still isolated on their parking
+        # network are claimable; a claimed container keeps the parked label
+        # because Docker labels are immutable.
+        filters = {"label": ["cyberlab.managed=true", f"{WARM_LABEL}=parked"]}
+        result = []
+        for container in self.client.containers.list(filters=filters):
+            if image_id is not None and container.attrs.get("Image") != image_id:
+                continue
+            state = container.attrs["State"]
+            networks = list(container.attrs["NetworkSettings"]["Networks"])
+            if (state.get("Running") and state.get("Health", {}).get("Status") == "healthy"
+                    and networks and all(name.startswith(WARM_NET_PREFIX) for name in networks)):
+                result.append((container.id, container.labels.get(SESSION_LABEL, "").removeprefix("warm-")))
+        return result
+
+    def image_id(self, image: str) -> str | None:
+        try:
+            return self.client.images.get(image).id
+        except ImageNotFound:
+            return None
+
+    def claim_container(self, container_id: str, network_id: str) -> None:
+        obj = self._container(container_id)
+        if obj.labels.get(WARM_LABEL) != "parked":
+            raise RuntimeFailure("实例不是预热桌面")
+        state = obj.attrs["State"]
+        if not state.get("Running") or state.get("Health", {}).get("Status") != "healthy":
+            raise RuntimeFailure("预热桌面尚未就绪")
+        parked = [name for name in obj.attrs["NetworkSettings"]["Networks"] if name.startswith(WARM_NET_PREFIX)]
+        self.client.api.connect_container_to_network(container_id, network_id)
+        for name in parked:
+            self.client.api.disconnect_container_from_network(container_id, self.client.networks.get(name).id)
+
+    def prune_warm_networks(self) -> None:
+        for network in self.client.networks.list(filters={"label": "cyberlab.managed=true"}):
+            if network.name.startswith(WARM_NET_PREFIX) and not network.containers:
+                try:
+                    network.remove()
+                except Exception:
+                    log.warning("Warm parking network %s could not be removed", network.name)
 
     def start_activity(self, container_id: str, session_id: str, generation: int, cancelled: Callable[[], bool] | None = None) -> None:
         container = self._container(container_id)

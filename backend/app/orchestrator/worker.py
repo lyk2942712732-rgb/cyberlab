@@ -1,5 +1,6 @@
 import logging
 import time
+import uuid
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import select, text
@@ -9,6 +10,7 @@ from app.core.limits import cache
 from app.models import ACTIVE_STATUSES, LabSession, TargetImage
 from app.orchestrator.image_manager import ImageManager
 from app.orchestrator.lab_orchestrator import LabOrchestrator
+from app.orchestrator.models import ContainerSpec
 
 log = logging.getLogger(__name__)
 
@@ -67,6 +69,47 @@ class Worker:
                     self.images.load(db, image)
         except Exception:
             log.exception("Image job will retry")
+
+    def warm_tick(self) -> None:
+        # Parked desktops hold resident CPU/RAM, Refilling therefore waits for
+        # an idle host; small deployments keep the pool at 0 or 1.
+        target = settings().warm_kali_pool
+        try:
+            runtime = self.orchestrator.runtime
+            if target <= 0:
+                for container_id, _slot in runtime.parked_containers():
+                    runtime.delete_container(container_id)
+                runtime.prune_warm_networks()
+                return
+            with SessionLocal() as db:
+                if db.scalar(select(LabSession.id).where(LabSession.status.in_(ACTIVE_STATUSES)).limit(1)):
+                    return
+            current = runtime.image_id(settings().kali_image)
+            parked = runtime.parked_containers(current)
+            fresh = {pair[0] for pair in parked}
+            for container_id, _slot in runtime.parked_containers():
+                if container_id not in fresh:
+                    runtime.delete_container(container_id)
+            for container_id, _slot in parked[target:]:
+                runtime.delete_container(container_id)
+            for _ in range(max(0, target - len(parked))):
+                self._park_kali()
+            runtime.prune_warm_networks()
+        except Exception:
+            log.exception("Warm pool maintenance failed; will retry")
+
+    def _park_kali(self) -> None:
+        slot = uuid.uuid4().hex[:8]
+        network = self.orchestrator.runtime.create_network(f"warm-{slot}")
+        try:
+            spec = ContainerSpec(f"kali-warm-{slot}", settings().kali_image, network, "KALI", f"warm-{slot}",
+                                 settings().kali_cpu, settings().kali_memory_mb, parked=True, slot=slot)
+            container_id = self.orchestrator.runtime.create_container(spec)
+            self.orchestrator.runtime.start_container(container_id)
+            log.info("Parked warm desktop slot=%s container=%s", slot, container_id)
+        except Exception:
+            self.orchestrator.runtime.delete_network(network)
+            raise
 
     def recover_orphans(self) -> None:
         try:

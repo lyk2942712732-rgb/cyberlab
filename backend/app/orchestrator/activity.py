@@ -4,20 +4,47 @@ from pathlib import Path
 import sqlite3
 import time
 import uuid
+from sqlalchemy import select
 from app.core.config import settings
+from app.core.db import SessionLocal
+from app.models import LabInstance
+
+
+def _bases(identifier):
+    root = Path(settings().activity_dir).resolve()
+    bases = []
+    session = root / identifier
+    if session.is_dir() and not session.is_symlink():
+        bases.append(session)
+    # Warm desktops journal into their parking slot; the claim rows record
+    # which slot served each generation of this session.
+    with SessionLocal() as db:
+        names = list(db.scalars(select(LabInstance.container_name).where(
+            LabInstance.session_id == identifier, LabInstance.instance_type == "KALI",
+            LabInstance.container_name.like("kali-warm-%"))))
+    for name in names:
+        base = root / "warm" / name.removeprefix("kali-warm-") / identifier
+        if base.is_dir() and not base.is_symlink():
+            bases.append(base)
+    return bases
+
+
+def generations(identifier):
+    found = {}
+    for base in _bases(identifier):
+        for path in base.iterdir():
+            if path.name.isdigit() and path.is_dir() and not path.is_symlink():
+                found[int(path.name)] = base
+    return found
 
 
 def directory(identifier, generation=None):
     identifier = str(uuid.UUID(identifier))
-    root = Path(settings().activity_dir).resolve()
-    session = root / identifier
-    if not session.is_dir() or session.is_symlink():
+    found = generations(identifier)
+    chosen = generation if generation is not None else max(found, default=None)
+    if chosen not in found:
         return None
-    generations = sorted((int(p.name) for p in session.iterdir() if p.name.isdigit() and p.is_dir() and not p.is_symlink()), reverse=True)
-    chosen = generation if generation is not None else next(iter(generations), None)
-    if chosen not in generations:
-        return None
-    return session / str(chosen)
+    return found[chosen] / str(chosen)
 
 
 def state(identifier, generation=None):
@@ -44,7 +71,7 @@ def events(identifier, generation=None, after=0, limit=100):
     summary = state(identifier, generation)
     if folder is None:
         return {'state': summary, 'events': [], 'generations': [], 'next': None}
-    generations = sorted(int(p.name) for p in folder.parent.iterdir() if p.name.isdigit() and p.is_dir() and not p.is_symlink())
+    available = sorted(generations(identifier))
     path = folder / 'events.sqlite3'
     if any((folder / name).is_symlink() for name in ('events.sqlite3', 'events.sqlite3-wal', 'events.sqlite3-shm')):
         raise ValueError('invalid journal path')
@@ -58,4 +85,4 @@ def events(identifier, generation=None, after=0, limit=100):
         db.execute('PRAGMA trusted_schema=OFF')
         rows = db.execute('SELECT seq,timestamp,source,type,data FROM events WHERE seq>? ORDER BY seq LIMIT ?', (after, min(limit, 100) + 1)).fetchall()
     records = [dict(seq=row[0], timestamp=row[1], source=row[2], type=row[3], data=json.loads(row[4])) for row in rows[:limit]]
-    return {'state': summary, 'events': records, 'generations': generations, 'next': records[-1]['seq'] if len(rows) > limit else None}
+    return {'state': summary, 'events': records, 'generations': available, 'next': records[-1]['seq'] if len(rows) > limit else None}

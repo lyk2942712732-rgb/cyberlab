@@ -21,6 +21,11 @@ class LabOrchestrator:
 
     def cleanup(self, db: Session, session: LabSession) -> None:
         containers, _ = self.runtime.session_resources(session.id)
+        # A claimed warm desktop keeps its parking slot label, so label lookup
+        # cannot see it; the DB rows own the authoritative container list.
+        for instance in db.scalars(select(LabInstance).where(LabInstance.session_id == session.id)):
+            if instance.container_name and instance.runtime_id not in containers:
+                containers.append(instance.runtime_id)
         for container in containers:
             try:
                 self.runtime.stop_activity(container)
@@ -63,18 +68,14 @@ class LabOrchestrator:
                 raise RuntimeFailure("Kali 镜像不存在，请先构建系统 Kali 镜像")
             session.network_id = self.networks.create(session.id)
             session.status = "STARTING"
-            specs = [
-                ContainerSpec(f"kali-{uuid.uuid4()}", settings().kali_image, session.network_id, "KALI", session.id, settings().kali_cpu, settings().kali_memory_mb),
-                ContainerSpec(f"target-{uuid.uuid4()}", image.image_id, session.network_id, "TARGET", session.id, lab.cpu_limit, lab.memory_limit, {"LAB_FLAG": lab.flag}),
-            ]
-            identifiers = []
-            for spec in specs:
-                if cancelled():
-                    raise ProvisionCancelled("实验启动已取消")
-                runtime_id = self.runtime.create_container(spec)
-                identifiers.append(runtime_id)
-                db.add(LabInstance(session_id=session.id, instance_type=spec.instance_type, runtime_id=runtime_id, container_name=spec.name, image=spec.image))
-                self.runtime.start_container(runtime_id)
+            kali_id = self._place_kali(db, session)
+            target_spec = ContainerSpec(f"target-{uuid.uuid4()}", image.image_id, session.network_id, "TARGET", session.id, lab.cpu_limit, lab.memory_limit, {"LAB_FLAG": lab.flag})
+            if cancelled():
+                raise ProvisionCancelled("实验启动已取消")
+            target_id = self.runtime.create_container(target_spec)
+            db.add(LabInstance(session_id=session.id, instance_type="TARGET", runtime_id=target_id, container_name=target_spec.name, image=target_spec.image))
+            self.runtime.start_container(target_id)
+            identifiers = [kali_id, target_id]
             db.flush()
             deadline = time.monotonic() + settings().health_timeout
             while time.monotonic() < deadline:
@@ -109,6 +110,36 @@ class LabOrchestrator:
                 # Do not report a terminal state until leaked resources have been removed.
                 log.exception("Cleanup scheduled for retry session=%s", session.id)
                 session.status = "STOPPING"
+
+    def _place_kali(self, db: Session, session: LabSession) -> str:
+        # A pre-started desktop skips the ~90 s cold boot; claiming is a DB
+        # unique-constraint race, so concurrent workers cannot double-book it.
+        current = self.runtime.image_id(settings().kali_image)
+        for container_id, slot in self.runtime.parked_containers(current):
+            try:
+                with db.begin_nested():
+                    db.add(LabInstance(session_id=session.id, instance_type="KALI", runtime_id=container_id,
+                                      container_name=f"kali-warm-{slot}", image=settings().kali_image))
+                    db.flush()
+            except Exception:
+                log.info("Warm desktop %s was claimed by another session", container_id)
+                continue
+            try:
+                self.runtime.claim_container(container_id, session.network_id)
+                log.info("Claimed warm desktop session=%s container=%s", session.id, container_id)
+                return container_id
+            except Exception as exc:
+                log.warning("Warm desktop %s unusable during claim: %s", container_id, exc)
+                db.rollback()
+                try:
+                    self.runtime.delete_container(container_id)
+                except Exception:
+                    log.exception("Failed to discard broken warm desktop %s", container_id)
+        spec = ContainerSpec(f"kali-{uuid.uuid4()}", settings().kali_image, session.network_id, "KALI", session.id, settings().kali_cpu, settings().kali_memory_mb)
+        runtime_id = self.runtime.create_container(spec)
+        db.add(LabInstance(session_id=session.id, instance_type="KALI", runtime_id=runtime_id, container_name=spec.name, image=spec.image))
+        self.runtime.start_container(runtime_id)
+        return runtime_id
 
     def reconcile(self, db: Session, session: LabSession) -> None:
         if aware(session.expires_at) <= utcnow() or session.status in ("STOPPING", "FINISHED") or stop_requested(db, session.id):
