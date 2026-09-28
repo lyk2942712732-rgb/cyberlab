@@ -30,6 +30,6 @@ ENV CYBERLAB_ACTIVITY_ROOT=/var/lib/cyberlab/activity NO_AT_BRIDGE=0 MOZ_ACCESSI
 # VNC has no GPU; skip Firefox's unsupported hardware probe without disabling
 # Firefox's content sandbox or the container's security restrictions.
 ENV MOZ_AVOID_OPENGL_ALTOGETHER=1
-HEALTHCHECK --interval=5s --timeout=10s --start-period=15s --retries=10 \
+HEALTHCHECK --interval=20s --timeout=15s --start-period=30s --retries=30 \
     CMD python3 /usr/local/bin/check-desktop.py
 ENTRYPOINT ["/usr/local/bin/start-desktop"]

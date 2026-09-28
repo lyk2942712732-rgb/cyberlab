@@ -47,7 +47,7 @@ python -m app.seed_web_security --image-map /tmp/image-map.json
 
 ## 资源监控
 
-学生在实验页展开「资源与健康状态」后采样 Kali 和靶机，每 5 秒更新。收起、离开页面、页面隐藏、实验重置或终止时停止轮询并取消正在等待的前端请求。已发出的 Docker 读取可能继续至超时。
+学生在实验页展开「资源与健康状态」后采样 Kali 和靶机，每 10 秒更新。收起、离开页面、页面隐藏、实验重置或终止时停止轮询并取消正在等待的前端请求。已发出的 Docker 读取可能继续至超时。
 
 - CPU 100% 表示一个虚拟 CPU 的使用量；另显示相对容器额度的比例。首次采样没有差分基准，显示「采样中」。
 - 内存使用量扣除 inactive file cache，同时显示限制与占比。
@@ -56,7 +56,7 @@ python -m app.seed_web_security --image-map /tmp/image-map.json
 - 失败只在面板内提示，不反复弹窗；旧采样显示时间与淡化效果。
 - 仅会话所有者和管理员可查询；后端通过私有编排器接口读取指标，Docker 再校验管理标签和会话标签，不返回环境变量、宿主机进程或健康检查日志。
 
-接口：`GET /api/lab-sessions/{id}/metrics`。数据包含 `sampled_at`、`interval_seconds` 和 `instances`。编排器按会话、代次和实例集合缓存 5 秒，历史计数器在 60 秒后失效，不启动持续后台采集。
+接口：`GET /api/lab-sessions/{id}/metrics`。数据包含 `sampled_at`、`interval_seconds` 和 `instances`。编排器按会话、代次和实例集合缓存 10 秒，历史计数器在 60 秒后失效，不启动持续后台采集。
 
 ## 验证
 

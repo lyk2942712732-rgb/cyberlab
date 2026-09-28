@@ -30,7 +30,7 @@ async function refresh() {
   } catch {
     if (current === version) error.value = '暂时无法更新，以下为上次采样；实验可继续。'
   } finally {
-    if (current === version) { loading.value = false; if (active.value) timer = setTimeout(refresh, 5000) }
+    if (current === version) { loading.value = false; if (active.value) timer = setTimeout(refresh, 10000) }
   }
 }
 watch([active, () => props.sessionId, () => props.instanceKey, () => props.status], () => {
@@ -58,7 +58,7 @@ function width(value?: number | null) { return `${Math.min(100, Math.max(0, valu
     <span>{{ open ? '收起 −' : '展开 +' }}</span>
   </button>
   <div v-if="open" id="resource-details" class="resource-details">
-    <p class="resource-note" role="status">{{ error || (!active ? '指标刷新已暂停，实验就绪且页面可见时自动恢复。' : loading && !data ? '正在读取实例状态…' : '每 5 秒更新；CPU 100% 相当于一个虚拟 CPU 的使用量。') }}<span v-if="data"> 采样时间 {{ new Date(data.sampled_at).toLocaleTimeString('zh-CN') }}</span></p>
+    <p class="resource-note" role="status">{{ error || (!active ? '指标刷新已暂停，实验就绪且页面可见时自动恢复。' : loading && !data ? '正在读取实例状态…' : '每 10 秒更新；CPU 100% 相当于一个虚拟 CPU 的使用量。') }}<span v-if="data"> 采样时间 {{ new Date(data.sampled_at).toLocaleTimeString('zh-CN') }}</span></p>
     <div class="resource-grid">
       <article v-for="row in rows" :key="row.instance_type" class="resource-card" :class="{ stale: !!error }">
         <header><strong>{{ row.instance_type === 'KALI' ? 'Kali 桌面' : '实验靶机' }}</strong><span>{{ stateNames[row.status] || row.status }}</span><span class="health-badge" :class="row.health">{{ healthNames[row.health] || '未知' }}</span></header>

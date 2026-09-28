@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     # expose a different host path than the orchestrator container sees.
     activity_host_dir: str = "/var/lib/cyberlab/activity"
     activity_max_mb: int = Field(default=64, ge=1, le=1024)
-    worker_interval: float = Field(default=3, ge=1, le=30)
+    worker_interval: float = Field(default=5, ge=1, le=30)
     health_timeout: int = Field(default=90, ge=5, le=180)
     testing: bool = False
 

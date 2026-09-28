@@ -114,6 +114,11 @@ class DockerRuntime:
     def create_container(self, spec: ContainerSpec) -> str:
         if not self.image_exists(spec.image):
             raise RuntimeFailure("实验所需镜像不存在，请联系教学管理员")
+        # Docker merges omitted healthcheck fields from the image, so this only
+        # relaxes the steady-state cadence while keeping each image's own test.
+        healthcheck = ({"interval": 20_000_000_000, "timeout": 15_000_000_000, "retries": 30}
+                       if spec.instance_type == "KALI"
+                       else {"interval": 15_000_000_000, "timeout": 10_000_000_000, "retries": 10})
         volumes = {}
         if spec.instance_type == "KALI":
             # A student container sees only its own journal directory.
@@ -135,6 +140,7 @@ class DockerRuntime:
             security_opt=["no-new-privileges:true"], privileged=False,
             dns=["127.0.0.1"], shm_size="256m", restart_policy={"Name": "no"},
             log_config=docker.types.LogConfig(type="json-file", config={"max-size": "10m", "max-file": "2"}),
+            healthcheck=healthcheck,
             volumes=volumes,
         )
         return container.id

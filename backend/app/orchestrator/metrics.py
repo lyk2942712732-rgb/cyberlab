@@ -70,7 +70,7 @@ class ResourceMonitor:
             self._previous = {k: v for k, v in self._previous.items() if now - v["time"] < 60}
             key = (identifier, generation, tuple(instances))
             cached = self._sessions.get(key)
-            if cached and now - cached[0] < 5:
+            if cached and now - cached[0] < 10:
                 return cached[1]
             rows = []
             for kind, runtime_id, removed in instances:
@@ -90,6 +90,6 @@ class ResourceMonitor:
                 activity = activity_state(identifier)
             except ValueError:
                 activity = {"status": "unavailable"}
-            result = {"sampled_at": datetime.now(timezone.utc).isoformat(), "interval_seconds": 5, "instances": rows, "activity": activity}
+            result = {"sampled_at": datetime.now(timezone.utc).isoformat(), "interval_seconds": 10, "instances": rows, "activity": activity}
             self._sessions[key] = (time.monotonic(), result)
             return result

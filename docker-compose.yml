@@ -31,9 +31,9 @@ services:
     networks: [database-net]
     healthcheck:
       test: [CMD-SHELL, "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
+      interval: 30s
+      timeout: 10s
+      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -43,9 +43,9 @@ services:
     networks: [database-net]
     healthcheck:
       test: [CMD, redis-cli, ping]
-      interval: 5s
-      timeout: 3s
-      retries: 20
+      interval: 30s
+      timeout: 10s
+      retries: 10
 
   migrate:
     <<: *app
@@ -69,8 +69,8 @@ services:
       redis: {condition: service_healthy}
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
-      interval: 10s
-      timeout: 5s
+      interval: 30s
+      timeout: 10s
       retries: 10
 
   orchestrator:
@@ -90,8 +90,8 @@ services:
       redis: {condition: service_healthy}
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8081/health')"]
-      interval: 15s
-      timeout: 5s
+      interval: 30s
+      timeout: 10s
       retries: 10
 
   frontend:
