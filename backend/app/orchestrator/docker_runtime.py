@@ -160,7 +160,7 @@ class DockerRuntime:
     def start_container(self, container_id: str) -> None:
         self._container(container_id).start()
 
-    def parked_containers(self, image_id: str | None = None) -> list[tuple[str, str]]:
+    def parked_containers(self, image_id: str | None = None, healthy_only: bool = True) -> list[tuple[str, str]]:
         # Only desktops that are healthy and still isolated on their parking
         # network are claimable; a claimed container keeps the parked label
         # because Docker labels are immutable.
@@ -171,8 +171,13 @@ class DockerRuntime:
                 continue
             state = container.attrs["State"]
             networks = list(container.attrs["NetworkSettings"]["Networks"])
-            if (state.get("Running") and state.get("Health", {}).get("Status") == "healthy"
-                    and networks and all(name.startswith(WARM_NET_PREFIX) for name in networks)):
+            running = bool(state.get("Running"))
+            healthy = state.get("Health", {}).get("Status") == "healthy"
+            parked_net = bool(networks) and all(name.startswith(WARM_NET_PREFIX) for name in networks)
+            if not parked_net or state.get("Status") in ("exited", "dead", "removing"):
+                continue
+            if healthy_only and not (running and healthy):
+                continue
                 result.append((container.id, container.labels.get(SESSION_LABEL, "").removeprefix("warm-")))
         return result
 
@@ -197,8 +202,12 @@ class DockerRuntime:
     def prune_warm_networks(self) -> None:
         for network in self.client.networks.list(filters={"label": "cyberlab.managed=true"}):
             if network.name.startswith(WARM_NET_PREFIX) and not network.containers:
+                # The list summary omits attached endpoints; re-read before
+                # deleting so a parking slot's network is never removed.
                 try:
-                    network.remove()
+                    full = self.client.networks.get(network.id)
+                    if not full.containers:
+                        full.remove()
                 except Exception:
                     log.warning("Warm parking network %s could not be removed", network.name)
 

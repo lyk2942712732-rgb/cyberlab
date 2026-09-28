@@ -85,14 +85,19 @@ class Worker:
                 if db.scalar(select(LabSession.id).where(LabSession.status.in_(ACTIVE_STATUSES)).limit(1)):
                     return
             current = runtime.image_id(settings().kali_image)
-            parked = runtime.parked_containers(current)
-            fresh = {pair[0] for pair in parked}
-            for container_id, _slot in runtime.parked_containers():
-                if container_id not in fresh:
+            live = runtime.parked_containers(current, healthy_only=False)
+            live_ids = {pair[0] for pair in live}
+            # Desktops built from a replaced image are discarded first.
+            for container_id, _slot in runtime.parked_containers(healthy_only=False):
+                if container_id not in live_ids:
                     runtime.delete_container(container_id)
-            for container_id, _slot in parked[target:]:
+            # Starting desktops already occupy a pool slot; counting only
+            # healthy ones would create a new Kali on every tick.
+            healthy_ids = {pair[0] for pair in runtime.parked_containers(current)}
+            ordered = sorted(live, key=lambda pair: pair[0] not in healthy_ids)
+            for container_id, _slot in ordered[target:]:
                 runtime.delete_container(container_id)
-            for _ in range(max(0, target - len(parked))):
+            for _ in range(max(0, target - len(ordered))):
                 self._park_kali()
             runtime.prune_warm_networks()
         except Exception:
@@ -115,6 +120,10 @@ class Worker:
         try:
             # Lock each extant session before deciding its resources are orphaned.
             for identifier in self.orchestrator.runtime.managed_session_ids():
+                # Warm parking slots use pseudo session ids; their containers
+                # are owned by the pool, not by any lab session row.
+                if identifier.startswith("warm-"):
+                    continue
                 with SessionLocal.begin() as db:
                     existing = db.get(LabSession, identifier)
                     if existing:
