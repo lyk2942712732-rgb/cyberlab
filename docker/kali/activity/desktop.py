@@ -17,6 +17,7 @@ from Xlib.ext import record
 from Xlib.protocol import rq
 
 from agent import request
+from click_event import record_click
 
 # A killed supervisor must not leave this observer running.
 parent = os.getppid()
@@ -158,14 +159,7 @@ def poll():
             except queue.Empty:
                 break
             flush_edit()
-            details = {'target': None, 'target_source': 'coordinates_only'}
-            try:
-                details = target_at(x, y)
-            except Exception:
-                # The click itself is preserved with an explicit unknown target.
-                # An app without accessibility is not a lost click event.
-                pass
-            emit('ui.click', {**details, 'x': x, 'y': y, 'button': button, 'window': window_title()})
+            record_click(x, y, button, target_at, window_title, emit)
     except Exception:
         report_failure()
     return True
