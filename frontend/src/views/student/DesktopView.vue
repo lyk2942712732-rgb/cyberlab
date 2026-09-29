@@ -70,10 +70,11 @@ async function connect() {
     if (disposed) return
     // The stream now goes straight to websockify in the Kali container. The
     // one-shot ticket rides as a websocket subprotocol (browsers cannot set
-    // custom headers); nginx validates it before any desktop byte is proxied.
+    // custom headers); nginx validates and strips the ticket, then forwards
+    // binary so websockify can select a protocol the browser actually offered.
     const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/lab-sessions/${route.params.id}/desktop`
     if (!screen.value) return
-    rfb = new RFB(screen.value, url, { wsProtocols: ['cyberlab-ticket', ticket] })
+    rfb = new RFB(screen.value, url, { wsProtocols: ['binary', ticket] })
     const tuned = rfb as RFB & { qualityLevel: number; compressionLevel: number }
     tuned.qualityLevel = 5
     tuned.compressionLevel = 6
