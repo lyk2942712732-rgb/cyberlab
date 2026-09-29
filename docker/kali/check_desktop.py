@@ -3,6 +3,7 @@ import socket
 import struct
 import time
 import sys
+from pathlib import Path
 from check_x11 import check_shell_ready
 
 
@@ -44,6 +45,10 @@ if __name__ == "__main__":
             # Docker health must additionally wait for the usable desktop.
             if "--wait" not in sys.argv:
                 check_shell_ready()
+                if not Path('/tmp/runtime-student/desktop-env.json').is_file():
+                    raise OSError('Desktop session is still starting')
+                with socket.create_connection(('127.0.0.1', 6080), timeout=2):
+                    pass
             break
         except OSError:
             if attempt == attempts - 1:

@@ -99,6 +99,28 @@ def test_partial_creation_failure_rolls_back_resources(db, lab, users, runtime):
     assert not runtime.containers and not runtime.networks
 
 
+def test_parallel_creation_joins_late_target_before_failure_cleanup(db, lab, users, runtime, monkeypatch):
+    from threading import Barrier
+    from app.orchestrator.models import RuntimeFailure
+    both_started = Barrier(2)
+    created = []
+    original = runtime.create_container
+
+    def create(spec):
+        both_started.wait(timeout=3)
+        if spec.instance_type == "KALI":
+            raise RuntimeFailure("Kali failed while target was being created")
+        identifier = original(spec)
+        created.append(identifier)
+        return identifier
+
+    monkeypatch.setattr(runtime, "create_container", create)
+    session = start_ready(db, lab, users["student01"], runtime)
+    assert created  # A late-created target must be found by labels and reclaimed.
+    assert session.status == "FAILED"
+    assert not runtime.containers and not runtime.networks
+
+
 def test_missing_image_has_actionable_error_and_no_resources(db, lab, users, runtime):
     runtime.images.remove("sha256:target")
     session = start_ready(db, lab, users["student01"], runtime)

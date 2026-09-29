@@ -58,14 +58,15 @@ Docker 资源带系统生成 UUID 及 `cyberlab.managed / cyberlab.session / cyb
 
 Docker Image 不参与 Session TTL 清理。删除镜像由独立 ADMIN 操作触发，检查所有模板和容器引用，禁止强制删除。模板保存和镜像删除采用相同的镜像行锁，防止“刚检查完无人引用，另一请求立刻关联”的竞态。
 
-## 预热桌面池
+## 每次创建独立桌面
 
-`WARM_KALI_POOL`（默认 0）控制预先启动并停放的 Kali 桌面数量。停放中的桌面不接入任何实验网络，只停留在独立的 `lab-net-warm-*` 停车网络，操作日志写入 `activity/warm/<slot>/` 目录。实验启动时编排器优先占用一台健康的停放桌面：`LabInstance.runtime_id` 唯一约束防止并发双重占用，占用成功后容器切换到本次实验网络；没有可用桌面时回退到传统冷启动创建，启动耗时与原先一致。
+实验启动、重试和重置均新建 Kali 与 Target，不维护停放桌面池。两种容器在独立实验网络上并行创建、启动；数据库操作仍在编排主线程完成。任何一路失败都会先等待另一路结束，再按 Session 标签回收全部资源，避免迟到的创建操作泄漏容器。
 
-- 停放桌面占用常驻 CPU 与内存，因此补充只在宿主机没有活动实验时进行；池大小设为 0 会立即回收所有停放桌面。
-- Docker 标签创建后不可变，被占用的桌面保留 `cyberlab.warm=parked` 标签；资源清理、指标归属以数据库 `LabInstance` 行记录的权威容器清单为准。
-- 操作日志读取端按占用记录（`kali-warm-<slot>`）反查该 generation 所在的 slot 目录，日志文件本身不搬迁。
-- Kali 镜像重建后，旧镜像的停放桌面会被自动丢弃并按新镜像重建。
+Kali 直接启动 TigerVNC、websockify、XFCE 设置服务、Openbox、XFCE 面板和桌面，不加载登录会话恢复流程。字体和图标缓存在镜像构建时生成。健康检查要求 VNC 完整握手、窗口管理器、桌面、面板和桌面环境文件均可用；编排器还检查靶机可达及操作采集就绪，才提交 READY。
+
+操作日志统一位于 `activity/<session>/<generation>/`。从旧预热版本升级前，应停止活动实验，将旧 `activity/warm/<slot>/<session>/<generation>/` 日志迁入统一目录，检查冲突并保留原记录，再移除停放容器和空的停车网络。新版本不再识别旧预热日志路径。
+
+编排日志的 `Session startup` 记录 cleanup、network-created、kali-started、target-started、containers-healthy 和 activity-ready 各阶段累计秒数。启动性能应以真实 API 请求到 READY 的完整耗时验收；镜像预先构建并存在本机，但不能复用已经启动的 Kali。
 
 ## 网络与桌面
 

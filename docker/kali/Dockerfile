@@ -10,11 +10,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd --create-home --shell /bin/bash student \
     && mkdir -p /home/student/.config/xfce4 /home/student/.local/share \
     && chown -R student:student /home/student
+RUN apt-get update && apt-get install -y --no-install-recommends openbox \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY start.sh /usr/local/bin/start-desktop
+COPY desktop_session.py /usr/local/bin/desktop-session.py
 COPY activity/ /usr/local/lib/cyberlab-activity/
 COPY check_desktop.py /usr/local/bin/check-desktop.py
+COPY check_desktop.py /usr/local/bin/check_desktop.py
 COPY check_x11.py /usr/local/bin/check_x11.py
 COPY --chown=student:student xfwm4.xml /home/student/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
+COPY --chown=student:student xsettings.xml /home/student/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
 RUN chmod 755 /usr/local/bin/start-desktop \
     && mkdir -p /var/lib/cyberlab/activity \
     && chmod 755 /usr/local/lib/cyberlab-activity/emit.py \
@@ -22,7 +27,10 @@ RUN chmod 755 /usr/local/bin/start-desktop \
     && python3 /usr/local/lib/cyberlab-activity/install.py \
     && mkdir -p /usr/share/themes/CyberLab/xfwm4 \
     && cp /usr/share/themes/Default/xfwm4/*.xpm /usr/share/themes/Default/xfwm4/themerc /usr/share/themes/CyberLab/xfwm4/ \
-    && chown -R student:student /var/lib/cyberlab
+    && chown -R student:student /var/lib/cyberlab \
+    && fc-cache -f \
+    && gtk-update-icon-cache -f /usr/share/icons/Adwaita \
+    && gtk-update-icon-cache -f /usr/share/icons/hicolor
 USER student
 WORKDIR /home/student
 ENV DISPLAY=:1 HOME=/home/student
@@ -30,6 +38,7 @@ ENV CYBERLAB_ACTIVITY_ROOT=/var/lib/cyberlab/activity NO_AT_BRIDGE=0 MOZ_ACCESSI
 # VNC has no GPU; skip Firefox's unsupported hardware probe without disabling
 # Firefox's content sandbox or the container's security restrictions.
 ENV MOZ_AVOID_OPENGL_ALTOGETHER=1
-HEALTHCHECK --interval=20s --timeout=15s --start-period=30s --retries=30 \
+RUN fc-cache -f
+HEALTHCHECK --interval=20s --start-interval=3s --timeout=5s --start-period=60s --retries=3 \
     CMD python3 /usr/local/bin/check-desktop.py
 ENTRYPOINT ["/usr/local/bin/start-desktop"]

@@ -296,7 +296,9 @@ python3 -m unittest discover -s docker/kali -p 'test_*.py'
 
 健康检查必须完成 VNC 3.8 握手，并设置共享连接；仅连接端口或读取 `RFB` 开头就断开会触发 TigerVNC 失败计数，导致后续桌面连接被拉黑。修改 Kali 镜像后，需要重新启动实验才能使用新镜像。演示靶机使用 BusyBox wget 检查 HTTP 健康端点，预留 10 秒，避免反复启动 Python、加载 urllib 带来的额外开销。
 
-Kali 健康检查还必须确认 X11 窗口管理器已注册，且桌面和任务栏窗口都已出现，避免 VNC 已启动、XFCE 尚未加载时提前显示“就绪”。启动脚本的 `--wait` 只检查 VNC，以便随后启动 XFCE。容器默认关闭 XFWM 合成特效及 X Server 闲置屏保，并使用系统 Default 主题自带的 XPM 素材构建 CyberLab 窗框主题，减少启动时逐个解码 PNG 的开销。若启动仍慢，检查宿主机 `uptime`、`vmstat 1` 和 `docker stats --no-stream`；CPU 满载、后台更新及交换内存都会影响桌面启动，健康检查不能消除宿主机资源竞争。
+每次实验均新建 Kali 与靶机，两者并行启动，不再维护预热桌面池。Kali 直接启动 TigerVNC、websockify、XFCE 设置服务、Openbox 窗口管理器、XFCE 面板和桌面，跳过登录会话恢复；终端、Firefox 和实验工具保持可用。字体、图标缓存提前写入镜像。Kali 健康检查要求完整 VNC 握手、窗口管理器、桌面和任务栏窗口、桌面环境文件及 websockify 端口均可用；平台还等待靶机可达和操作采集启动，再显示“就绪”。`WORKER_INTERVAL` 默认 1 秒。启动分段耗时见编排器的 `Session startup` 日志。
+
+冷启动目标约 30 秒，实际取决于宿主机与虚拟化环境，不能用单独 VNC 就绪替代完整验收。若仍慢，检查 `uptime`、`vmstat 1`、`/proc/pressure/cpu` 以及 Docker 创建/启动的分段耗时；Windows 上还应核对 VMware 版本和 Hyper-V/WHP 运行模式。当前实测与限制见 [冷启动记录](docs/COLD_START.md)。从旧预热版本升级需要先迁移历史预热日志，步骤见 [架构文档](docs/ARCHITECTURE.md#每次创建独立桌面)。
 
 Kali 的进程/线程总数上限为 512，靶机保持 256；Linux 的 PIDs 限制也计算线程，Firefox 启动可能触及过低的上限并留下无响应的进程。可通过容器内 `/sys/fs/cgroup/pids.events` 的 `max` 计数检查是否触限。Kali 默认建议 `KALI_CPU=2`，不会独占两个核心；无 GPU 的 VNC 环境通过 `MOZ_AVOID_OPENGL_ALTOGETHER=1` 跳过 Firefox 的 OpenGL 硬件探测，保留浏览器及容器的沙箱限制。
 

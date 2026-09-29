@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
                 log.exception("Worker iteration failed; durable commands will retry")
             await asyncio.sleep(settings().worker_interval)
 
-    tasks = [asyncio.create_task(loop(operation)) for operation in (worker.tick, worker.import_tick, worker.warm_tick)]
+    tasks = [asyncio.create_task(loop(operation)) for operation in (worker.tick, worker.import_tick)]
     yield
     for task in tasks:
         task.cancel()

@@ -3,21 +3,4 @@ set -eu
 export XDG_RUNTIME_DIR="/tmp/runtime-student"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
-cleanup() {
-  for pid in ${xfce_pid:-} ${web_pid:-} ${vnc_pid:-}; do
-    kill "$pid" 2>/dev/null || true
-  done
-}
-trap cleanup EXIT INT TERM
-# VNC stays loopback-only inside the container. websockify binds 0.0.0.0 so
-# nginx can reach it on the internal desktop network; no port is published to
-# the host, and nginx only proxies after a one-shot ticket check.
-Xtigervnc :1 -geometry 1440x900 -depth 24 -s 0 -localhost yes -SecurityTypes None -rfbport 5901 &
-vnc_pid=$!
-python3 /usr/local/bin/check-desktop.py --wait
-xsetroot -solid '#18332d'
-dbus-run-session -- xfce4-session &
-xfce_pid=$!
-websockify --web=/usr/share/novnc 0.0.0.0:6080 127.0.0.1:5901 &
-web_pid=$!
-wait "$vnc_pid"
+exec dbus-run-session -- python3 /usr/local/bin/desktop-session.py

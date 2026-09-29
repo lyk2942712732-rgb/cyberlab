@@ -23,12 +23,8 @@ class Settings(BaseSettings):
     # expose a different host path than the orchestrator container sees.
     activity_host_dir: str = "/var/lib/cyberlab/activity"
     activity_max_mb: int = Field(default=64, ge=1, le=1024)
-    worker_interval: float = Field(default=5, ge=1, le=30)
+    worker_interval: float = Field(default=1, ge=1, le=30)
     health_timeout: int = Field(default=90, ge=5, le=180)
-    # Pre-started Kali desktops kept parked without a session network. Parking
-    # costs resident CPU/RAM, so small hosts should keep the pool at 0 or 1 and
-    # only refill while no experiment is active.
-    warm_kali_pool: int = Field(default=0, ge=0, le=4)
     testing: bool = False
 
 

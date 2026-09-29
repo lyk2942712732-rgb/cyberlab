@@ -1,6 +1,5 @@
 import logging
 import time
-import uuid
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import select, text
@@ -10,7 +9,6 @@ from app.core.limits import cache
 from app.models import ACTIVE_STATUSES, LabSession, TargetImage
 from app.orchestrator.image_manager import ImageManager
 from app.orchestrator.lab_orchestrator import LabOrchestrator
-from app.orchestrator.models import ContainerSpec
 
 log = logging.getLogger(__name__)
 
@@ -70,69 +68,10 @@ class Worker:
         except Exception:
             log.exception("Image job will retry")
 
-    def warm_tick(self) -> None:
-        # Parked desktops hold resident CPU/RAM, Refilling therefore waits for
-        # an idle host; small deployments keep the pool at 0 or 1.
-        target = settings().warm_kali_pool
-        try:
-            runtime = self.orchestrator.runtime
-            if target <= 0:
-                for container_id, _slot in runtime.parked_containers(healthy_only=False):
-                    try:
-                        runtime.delete_container(container_id)
-                    except Exception:
-                        log.warning("Parked container %s could not be removed", container_id[:12])
-                runtime.prune_warm_networks()
-                return
-            with SessionLocal() as db:
-                if db.scalar(select(LabSession.id).where(LabSession.status.in_(ACTIVE_STATUSES)).limit(1)):
-                    return
-            current = runtime.image_id(settings().kali_image)
-            live = runtime.parked_containers(current, healthy_only=False)
-            live_ids = {pair[0] for pair in live}
-            # Desktops built from a replaced image are discarded first.
-            for container_id, _slot in runtime.parked_containers(healthy_only=False):
-                if container_id not in live_ids:
-                    try:
-                        runtime.delete_container(container_id)
-                    except Exception:
-                        log.warning("Stale parked container %s could not be removed", container_id[:12])
-            # Starting desktops already occupy a pool slot; counting only
-            # healthy ones would create a new Kali on every tick.
-            healthy_ids = {pair[0] for pair in runtime.parked_containers(current)}
-            ordered = sorted(live, key=lambda pair: pair[0] not in healthy_ids)
-            for container_id, _slot in ordered[target:]:
-                try:
-                    runtime.delete_container(container_id)
-                except Exception:
-                    log.warning("Surplus parked container %s could not be removed", container_id[:12])
-            for _ in range(max(0, target - len(ordered))):
-                self._park_kali()
-            runtime.prune_warm_networks()
-        except Exception:
-            log.exception("Warm pool maintenance failed; will retry")
-
-    def _park_kali(self) -> None:
-        slot = uuid.uuid4().hex[:8]
-        network = self.orchestrator.runtime.create_network(f"warm-{slot}")
-        try:
-            spec = ContainerSpec(f"kali-warm-{slot}", settings().kali_image, network, "KALI", f"warm-{slot}",
-                                 settings().kali_cpu, settings().kali_memory_mb, parked=True, slot=slot)
-            container_id = self.orchestrator.runtime.create_container(spec)
-            self.orchestrator.runtime.start_container(container_id)
-            log.info("Parked warm desktop slot=%s container=%s", slot, container_id)
-        except Exception:
-            self.orchestrator.runtime.delete_network(network)
-            raise
-
     def recover_orphans(self) -> None:
         try:
             # Lock each extant session before deciding its resources are orphaned.
             for identifier in self.orchestrator.runtime.managed_session_ids():
-                # Warm parking slots use pseudo session ids; their containers
-                # are owned by the pool, not by any lab session row.
-                if identifier.startswith("warm-"):
-                    continue
                 with SessionLocal.begin() as db:
                     existing = db.get(LabSession, identifier)
                     if existing:

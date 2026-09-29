@@ -120,7 +120,7 @@ def target_at(x, y):
         window = control.create_resource_object('window', int(active.value[0]))
         prop = window.get_full_property(control.intern_atom('_NET_WM_PID'), X.AnyPropertyType)
         active_pid = int(prop.value[0]) if prop is not None and len(prop.value) else None
-    deadline = time.monotonic() + .4
+    deadline = time.monotonic() + 1
     best = None
     visited = 0
     # Some Java wrappers expose -1 bounds for the top-level frame. Search its
@@ -129,6 +129,32 @@ def target_at(x, y):
         app = desktop.get_child_at_index(app_index)
         if active_pid and app.get_process_id() != active_pid:
             continue
+        # Prefer the toolkit's hit test: traversing every sibling costs several
+        # D-Bus round trips per widget and can exhaust the budget before reaching
+        # the clicked button on a small VM. Bounds keep other windows excluded.
+        for index in range(min(app.get_child_count(), 64)):
+            item = app.get_child_at_index(index)
+            seen = set()
+            depth = 0
+            while item is not None and depth < 16 and time.monotonic() < deadline:
+                marker = hash(item)
+                if marker in seen:
+                    break
+                seen.add(marker)
+                component = item.get_component_iface()
+                if not component:
+                    break
+                box = component.get_extents(Atspi.CoordType.SCREEN)
+                if not (box.width > 0 and box.height > 0 and
+                        box.x <= x < box.x + box.width and box.y <= y < box.y + box.height):
+                    break
+                candidate = info(item)
+                if candidate['target'] and (best is None or depth > best[0]):
+                    best = (depth, candidate)
+                item = component.get_accessible_at_point(x, y, Atspi.CoordType.SCREEN)
+                depth += 1
+        if best and best[1]['role'] not in ('frame', 'window', 'panel', 'application'):
+            return best[1]
         stack = [(app, 0)]
         while stack and visited < 192 and time.monotonic() < deadline:
             item, depth = stack.pop()

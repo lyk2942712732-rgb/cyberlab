@@ -47,10 +47,7 @@ def key(value):
 
 def main():
     os.environ['DISPLAY'] = ':1'
-    pid = run('pgrep', '-x', 'xfce4-session').splitlines()[0]
-    for field in Path(f'/proc/{pid}/environ').read_bytes().split(b'\0'):
-        if field.startswith(b'DBUS_SESSION_BUS_ADDRESS='):
-            os.environ['DBUS_SESSION_BUS_ADDRESS'] = field.decode().split('=', 1)[1]
+    os.environ.update(json.loads(Path('/tmp/runtime-student/desktop-env.json').read_text()))
     session = str(uuid.uuid4())
     subprocess.run(['/usr/bin/python3', str(Path(__file__).with_name('agent.py')), 'start', session, '1', '64'], check=True)
     subprocess.Popen(['xfce4-terminal', '--disable-server', '--title=CyberLab-Activity-QA'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

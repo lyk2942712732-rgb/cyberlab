@@ -1,9 +1,9 @@
-"""Require XFCE's window manager, desktop and panel, not just a VNC socket."""
+"""Require a window manager, XFCE desktop and panel, not just a VNC socket."""
 import ctypes
 from ctypes import c_char_p, c_int, c_long, c_ulong, c_void_p, POINTER
 
 
-def check_shell_ready():
+def check_shell_ready(require_shell=True, settings_only=False):
     x11 = ctypes.CDLL("libX11.so.6")
     x11.XOpenDisplay.argtypes = [c_char_p]
     x11.XOpenDisplay.restype = c_void_p
@@ -11,6 +11,8 @@ def check_shell_ready():
     x11.XDefaultRootWindow.restype = c_ulong
     x11.XInternAtom.argtypes = [c_void_p, c_char_p, c_int]
     x11.XInternAtom.restype = c_ulong
+    x11.XGetSelectionOwner.argtypes = [c_void_p, c_ulong]
+    x11.XGetSelectionOwner.restype = c_ulong
     x11.XGetWindowProperty.argtypes = [c_void_p, c_ulong, c_ulong, c_long, c_long,
                                      c_int, c_ulong, POINTER(c_ulong), POINTER(c_int),
                                      POINTER(c_ulong), POINTER(c_ulong), POINTER(c_void_p)]
@@ -39,8 +41,14 @@ def check_shell_ready():
                     x11.XFree(data)
 
         root = x11.XDefaultRootWindow(display)
+        if settings_only:
+            if not x11.XGetSelectionOwner(display, atom('_XSETTINGS_S0')):
+                raise OSError('XFCE settings are still starting')
+            return
         if not property_values(root, "_NET_SUPPORTING_WM_CHECK"):
-            raise OSError("XFCE window manager is still starting")
+            raise OSError("Desktop window manager is still starting")
+        if not require_shell:
+            return
         types = set()
         for window in property_values(root, "_NET_CLIENT_LIST"):
             types.update(property_values(window, "_NET_WM_WINDOW_TYPE"))

@@ -8,10 +8,7 @@ from verify_desktop import run, key, type_text, wait_for, events, find_event
 
 
 def main():
-    pid = run('pgrep', '-x', 'xfce4-session').splitlines()[0]
-    for value in Path(f'/proc/{pid}/environ').read_bytes().split(b'\0'):
-        if value.startswith(b'DBUS_SESSION_BUS_ADDRESS='):
-            os.environ['DBUS_SESSION_BUS_ADDRESS'] = value.decode().split('=', 1)[1]
+    os.environ.update(json.loads(Path('/tmp/runtime-student/desktop-env.json').read_text()))
     fixture = subprocess.Popen(['/usr/bin/python3', str(Path(__file__).with_name('native_fixture.py'))])
     try:
         window = wait_for(lambda: run('xdotool','search','--onlyvisible','--name','^CyberLab Native QA$').splitlines()[0])

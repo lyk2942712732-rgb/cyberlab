@@ -4,10 +4,7 @@ from pathlib import Path
 import sqlite3
 import time
 import uuid
-from sqlalchemy import select
 from app.core.config import settings
-from app.core.db import SessionLocal
-from app.models import LabInstance
 
 
 def _bases(identifier):
@@ -16,16 +13,6 @@ def _bases(identifier):
     session = root / identifier
     if session.is_dir() and not session.is_symlink():
         bases.append(session)
-    # Warm desktops journal into their parking slot; the claim rows record
-    # which slot served each generation of this session.
-    with SessionLocal() as db:
-        names = list(db.scalars(select(LabInstance.container_name).where(
-            LabInstance.session_id == identifier, LabInstance.instance_type == "KALI",
-            LabInstance.container_name.like("kali-warm-%"))))
-    for name in names:
-        base = root / "warm" / name.removeprefix("kali-warm-") / identifier
-        if base.is_dir() and not base.is_symlink():
-            bases.append(base)
     return bases
 
 

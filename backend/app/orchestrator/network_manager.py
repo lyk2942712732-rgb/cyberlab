@@ -13,9 +13,7 @@ class NetworkManager:
         containers, networks = self.runtime.session_resources(session_id)
         containers.extend(extra_containers or [])
         errors = []
-        # A claimed warm desktop keeps its parking-slot session label, so the
-        # label scan cannot see it; the stop path passes its runtime id here.
-        for container in containers:
+        for container in dict.fromkeys(containers):
             if not self.runtime.owns_container(container, session_id):
                 continue
             try:

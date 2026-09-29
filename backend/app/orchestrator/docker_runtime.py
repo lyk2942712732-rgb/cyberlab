@@ -11,8 +11,6 @@ from app.core.config import settings
 log = logging.getLogger(__name__)
 MANAGED = {"cyberlab.managed": "true"}
 SESSION_LABEL = "cyberlab.session"
-WARM_LABEL = "cyberlab.warm"
-WARM_NET_PREFIX = "lab-net-warm-"
 # Shared internal network carrying only nginx and Kali aliases. Desktop frames
 # flow browser -> nginx -> container websockify, with no Python relay in between.
 DESKTOP_NET = "cyberlab-desktop-net"
@@ -30,9 +28,7 @@ class DockerRuntime:
 
     def resource_snapshot(self, container_id: str, session_id: str) -> tuple[dict, dict]:
         obj = self._container(container_id)
-        # Claimed warm desktops keep their parking slot label; the metrics
-        # endpoint only passes runtime ids owned by this session's DB rows.
-        if obj.labels.get(SESSION_LABEL) != session_id and obj.labels.get(WARM_LABEL) != "parked":
+        if obj.labels.get(SESSION_LABEL) != session_id:
             raise RuntimeFailure("实例不属于当前实验")
         attrs = obj.attrs
         stats = obj.stats(stream=False, one_shot=True) if attrs["State"].get("Running") else {}
@@ -64,22 +60,16 @@ class DockerRuntime:
     def create_container(self, spec: ContainerSpec) -> str:
         if not self.image_exists(spec.image):
             raise RuntimeFailure("实验所需镜像不存在，请联系教学管理员")
-        # Docker merges omitted healthcheck fields from the image, so this only
-        # relaxes the steady-state cadence while keeping each image's own test.
-        healthcheck = ({"interval": 20_000_000_000, "timeout": 15_000_000_000, "retries": 30}
+        # Keep each image's test. The Kali image supplies StartInterval (3s);
+        # docker-py's Healthcheck drops that field if supplied here. Docker
+        # inherits it from the image and probes less often after startup.
+        healthcheck = ({"interval": 20_000_000_000, "start_period": 60_000_000_000, "timeout": 5_000_000_000, "retries": 3}
                        if spec.instance_type == "KALI"
-                       else {"interval": 15_000_000_000, "timeout": 10_000_000_000, "retries": 10})
+                       else {"interval": 15_000_000_000, "start_period": 60_000_000_000, "timeout": 5_000_000_000, "retries": 10})
         volumes = {}
         if spec.instance_type == "KALI":
-            if spec.slot:
-                # A parked desktop journals into its slot directory; the claim
-                # row later tells readers where this session's journal landed.
-                root = Path(settings().activity_dir) / "warm" / spec.slot
-                host_root = PurePosixPath(settings().activity_host_dir) / "warm" / spec.slot
-            else:
-                # A student container sees only its own journal directory.
-                root = Path(settings().activity_dir) / spec.session_id
-                host_root = PurePosixPath(settings().activity_host_dir) / spec.session_id
+            root = Path(settings().activity_dir) / spec.session_id
+            host_root = PurePosixPath(settings().activity_host_dir) / spec.session_id
             root.mkdir(parents=True, exist_ok=True)
             os.chown(root, 1000, 1000)
             root.chmod(0o700)
@@ -87,8 +77,7 @@ class DockerRuntime:
                 "bind": f"/var/lib/cyberlab/activity/{spec.session_id}", "mode": "rw"}
         container = self.client.containers.create(
             image=spec.image, name=spec.name, network=spec.network_id,
-            labels={**MANAGED, SESSION_LABEL: spec.session_id, "cyberlab.type": spec.instance_type,
-                    **({WARM_LABEL: "parked"} if spec.parked else {})},
+            labels={**MANAGED, SESSION_LABEL: spec.session_id, "cyberlab.type": spec.instance_type},
             environment=spec.environment, detach=True, init=True,
             nano_cpus=int(spec.cpu * 1_000_000_000), mem_limit=f"{spec.memory_mb}m",
             # Firefox uses many threads, all counted by the pids cgroup.
@@ -101,82 +90,18 @@ class DockerRuntime:
             healthcheck=healthcheck,
             volumes=volumes,
         )
-        if spec.instance_type == "KALI" and not spec.parked:
-            # A fresh desktop joins the shared network immediately; a parked one
-            # waits until a session claims it (claim_container).
+        if spec.instance_type == "KALI":
             self.client.api.connect_container_to_network(container.id, self._desktop_net_id(), aliases=[spec.name])
         return container.id
 
     def start_container(self, container_id: str) -> None:
         self._container(container_id).start()
 
-    def parked_containers(self, image_id: str | None = None, healthy_only: bool = True) -> list[tuple[str, str]]:
-        # Only desktops that are healthy and still isolated on their parking
-        # network are claimable; a claimed container keeps the parked label
-        # because Docker labels are immutable. The low-level list avoids a
-        # second inspect per container, and containers that vanish mid-scan
-        # are skipped instead of aborting the whole pool pass.
-        filters = {"label": ["cyberlab.managed=true", f"{WARM_LABEL}=parked"]}
-        result = []
-        for summary in self.client.api.containers(all=True, filters=filters):
-            container_id = summary["Id"]
-            labels = summary.get("Labels") or {}
-            if image_id is not None and summary.get("ImageID") != image_id:
-                continue
-            if summary.get("State") in ("exited", "dead", "removing"):
-                continue
-            networks = list((summary.get("NetworkSettings") or {}).get("Networks") or {})
-            if not networks or not all(name.startswith(WARM_NET_PREFIX) for name in networks):
-                continue
-            if healthy_only:
-                try:
-                    state = self.client.api.inspect_container(container_id)["State"]
-                except (NotFound, APIError):
-                    continue
-                if not state.get("Running") or state.get("Health", {}).get("Status") != "healthy":
-                    continue
-            result.append((container_id, labels.get(SESSION_LABEL, "").removeprefix("warm-")))
-        return result
-
-    def image_id(self, image: str) -> str | None:
-        try:
-            return self.client.images.get(image).id
-        except ImageNotFound:
-            return None
-
-    def claim_container(self, container_id: str, network_id: str) -> None:
-        obj = self._container(container_id)
-        if obj.labels.get(WARM_LABEL) != "parked":
-            raise RuntimeFailure("实例不是预热桌面")
-        state = obj.attrs["State"]
-        if not state.get("Running") or state.get("Health", {}).get("Status") != "healthy":
-            raise RuntimeFailure("预热桌面尚未就绪")
-        parked = [name for name in obj.attrs["NetworkSettings"]["Networks"] if name.startswith(WARM_NET_PREFIX)]
-        self.client.api.connect_container_to_network(container_id, network_id)
-        if obj.labels.get("cyberlab.type") == "KALI":
-            # Container names are unique; the alias lets nginx route the
-            # websockify stream by the name returned by the ticket check.
-            self.client.api.connect_container_to_network(container_id, self._desktop_net_id(), aliases=[obj.name])
-        for name in parked:
-            self.client.api.disconnect_container_from_network(container_id, self.client.networks.get(name).id)
-
     def disconnect_desktop(self, container_id: str) -> None:
         try:
             self.client.api.disconnect_container_from_network(container_id, self._desktop_net_id())
         except (NotFound, APIError):
             pass
-
-    def prune_warm_networks(self) -> None:
-        for network in self.client.networks.list(filters={"label": "cyberlab.managed=true"}):
-            if network.name.startswith(WARM_NET_PREFIX) and not network.containers:
-                # The list summary omits attached endpoints; re-read before
-                # deleting so a parking slot's network is never removed.
-                try:
-                    full = self.client.networks.get(network.id)
-                    if not full.containers:
-                        full.remove()
-                except (NotFound, APIError):
-                    log.warning("Warm parking network %s could not be removed", network.name)
 
     def start_activity(self, container_id: str, session_id: str, generation: int, cancelled: Callable[[], bool] | None = None) -> None:
         container = self._container(container_id)
@@ -222,13 +147,11 @@ class DockerRuntime:
             pass
 
     def owns_container(self, container_id: str, session_id: str) -> bool:
-        # Claimed warm desktops keep the immutable warm-slot session label, so
-        # ownership is their container name; normal containers carry the label.
         try:
             labels = self._container(container_id).labels
         except NotFound:
             return False
-        return labels.get(SESSION_LABEL) == session_id or labels.get(SESSION_LABEL, "").startswith("warm-")
+        return labels.get(SESSION_LABEL) == session_id
 
     def inspect_container(self, container_id: str) -> ContainerInfo:
         obj = self._container(container_id)

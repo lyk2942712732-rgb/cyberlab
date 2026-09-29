@@ -261,11 +261,10 @@ def start(session, generation, max_mb):
     SOCKET.unlink(missing_ok=True)
     root = Path(os.environ.get('CYBERLAB_ACTIVITY_ROOT', '/var/lib/cyberlab/activity')) / session / str(generation)
     env = os.environ.copy()
-    pids = subprocess.check_output(['pgrep', '-x', 'xfce4-session'], text=True).splitlines()
-    values = Path(f'/proc/{pids[0]}/environ').read_bytes().split(b'\0')
-    for value in values:
-        if value.startswith(b'DBUS_SESSION_BUS_ADDRESS='):
-            env['DBUS_SESSION_BUS_ADDRESS'] = value.decode().split('=', 1)[1]
+    # The desktop supervisor publishes its session only after the shell is ready.
+    desktop_env = json.loads(Path('/tmp/runtime-student/desktop-env.json').read_text())
+    for key in ('DBUS_SESSION_BUS_ADDRESS', 'DISPLAY', 'XDG_RUNTIME_DIR'):
+        env[key] = desktop_env[key]
     log = RUNTIME / 'agent.log'
     with log.open('w') as stream:
         process = subprocess.Popen(['/usr/bin/python3', __file__, 'serve', session, str(generation), str(max_mb)],

@@ -1,7 +1,7 @@
 import logging
-import contextlib
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from app.core.config import settings
@@ -22,13 +22,11 @@ class LabOrchestrator:
 
     def cleanup(self, db: Session, session: LabSession) -> None:
         containers, _ = self.runtime.session_resources(session.id)
-        # A claimed warm desktop keeps its parking slot label, so label lookup
-        # cannot see it; the DB rows own the authoritative container list.
+        # Include persisted resources as well as crash-recovery label results.
         for instance in db.scalars(select(LabInstance).where(LabInstance.session_id == session.id)):
             if instance.container_name and instance.runtime_id not in containers:
                 containers.append(instance.runtime_id)
-        # The session network must not be deleted with the warm container still
-        # attached; owning containers (label or DB row) are removed first.
+        # Finalize journals before deleting containers and their network.
         for container in containers:
             try:
                 self.runtime.disconnect_desktop(container)
@@ -37,23 +35,10 @@ class LabOrchestrator:
                 log.exception("Activity finalization failed session=%s container=%s: %s", session.id, container, exc)
                 # Preserve a visible failure but always reclaim the desktop resources.
                 session.error = "操作记录收尾失败，记录可能不完整"
-        # If activity finalization raised for a vanished container, its DB row
-        # may predate the crash; drop those rows before the label scan so the
-        # warm desktop is not mistaken for a leaked resource.
-        self._forget_vanished_instances(db, session, containers)
         self.networks.cleanup(session.id, containers)
         for instance in db.scalars(select(LabInstance).where(LabInstance.session_id == session.id)):
             instance.status = "removed"
         session.network_id = None
-
-    def _forget_vanished_instances(self, db: Session, session: LabSession, containers: list[str]) -> None:
-        for instance in list(db.scalars(select(LabInstance).where(LabInstance.session_id == session.id))):
-            if instance.status != "running" or instance.runtime_id in containers:
-                continue
-            try:
-                self.runtime.inspect_container(instance.runtime_id)
-            except Exception:
-                db.execute(delete(LabInstance).where(LabInstance.id == instance.id))
 
     def stop(self, db: Session, session: LabSession) -> None:
         session.status = "STOPPING"
@@ -66,6 +51,11 @@ class LabOrchestrator:
         log.info("Session destroyed session=%s", session.id)
 
     def provision(self, db: Session, session: LabSession) -> None:
+        started = time.monotonic()
+
+        def milestone(stage):
+            log.info("Session startup session=%s stage=%s elapsed=%.3f", session.id, stage, time.monotonic() - started)
+
         def cancelled():
             return aware(session.expires_at) <= utcnow() or stop_requested(db, session.id)
 
@@ -73,6 +63,7 @@ class LabOrchestrator:
             # Retry/reset always first removes previous generation, including unlinked
             # resources discovered by labels after a controller crash.
             self.cleanup(db, session)
+            milestone("cleanup")
             db.execute(delete(LabInstance).where(LabInstance.session_id == session.id))
             if cancelled():
                 self.stop(db, session)
@@ -85,13 +76,30 @@ class LabOrchestrator:
                 raise RuntimeFailure("Kali 镜像不存在，请先构建系统 Kali 镜像")
             session.network_id = self.networks.create(session.id)
             session.status = "STARTING"
-            kali_id = self._place_kali(db, session)
+            milestone("network-created")
+            kali_spec = ContainerSpec(f"kali-{uuid.uuid4()}", settings().kali_image, session.network_id, "KALI", session.id, settings().kali_cpu, settings().kali_memory_mb)
             target_spec = ContainerSpec(f"target-{uuid.uuid4()}", image.image_id, session.network_id, "TARGET", session.id, lab.cpu_limit, lab.memory_limit, {"LAB_FLAG": lab.flag})
             if cancelled():
                 raise ProvisionCancelled("实验启动已取消")
-            target_id = self.runtime.create_container(target_spec)
-            db.add(LabInstance(session_id=session.id, instance_type="TARGET", runtime_id=target_id, container_name=target_spec.name, image=target_spec.image))
-            self.runtime.start_container(target_id)
+
+            def launch(spec):
+                identifier = self.runtime.create_container(spec)
+                self.runtime.start_container(identifier)
+                milestone(f"{spec.instance_type.lower()}-started")
+                return identifier
+
+            # Only Docker calls run concurrently; the SQLAlchemy transaction
+            # stays on this thread. Always join both jobs before cleanup so a
+            # late create cannot leave resources behind after a failure/stop.
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                jobs = [(spec, pool.submit(launch, spec)) for spec in (kali_spec, target_spec)]
+                ids = {}
+                for spec, future in jobs:
+                    identifier = future.result()
+                    ids[spec.instance_type] = identifier
+                    db.add(LabInstance(session_id=session.id, instance_type=spec.instance_type,
+                                       runtime_id=identifier, container_name=spec.name, image=spec.image))
+            kali_id, target_id = ids["KALI"], ids["TARGET"]
             identifiers = [kali_id, target_id]
             db.flush()
             deadline = time.monotonic() + settings().health_timeout
@@ -101,6 +109,7 @@ class LabOrchestrator:
                     return
                 states = [self.runtime.inspect_container(identifier) for identifier in identifiers]
                 if all(state.healthy for state in states) and self.runtime.probe_target(identifiers[0], states[1].ip_address, lab.target_port):
+                    milestone("containers-healthy")
                     for instance in db.scalars(select(LabInstance).where(LabInstance.session_id == session.id)):
                         info = next(s for s in states if s.id == instance.runtime_id)
                         instance.status, instance.ip_address = info.status, info.ip_address
@@ -108,6 +117,7 @@ class LabOrchestrator:
                     self.runtime.start_activity(identifiers[0], session.id, session.generation, cancelled=cancelled)
                     if cancelled():
                         raise ProvisionCancelled("实验启动已取消")
+                    milestone("activity-ready")
                     log.info("Session ready session=%s", session.id)
                     return
                 if any(s.status in ("exited", "dead") for s in states):
@@ -127,33 +137,6 @@ class LabOrchestrator:
                 # Do not report a terminal state until leaked resources have been removed.
                 log.exception("Cleanup scheduled for retry session=%s", session.id)
                 session.status = "STOPPING"
-
-    def _place_kali(self, db: Session, session: LabSession) -> str:
-        # A pre-started desktop skips the ~90 s cold boot; claiming is a DB
-        # unique-constraint race, so concurrent workers cannot double-book it.
-        current = self.runtime.image_id(settings().kali_image)
-        for container_id, slot in self.runtime.parked_containers(current):
-            nested = db.begin_nested()
-            try:
-                db.add(LabInstance(session_id=session.id, instance_type="KALI", runtime_id=container_id,
-                                  container_name=f"kali-warm-{slot}", image=settings().kali_image))
-                db.flush()
-                self.runtime.claim_container(container_id, session.network_id)
-                nested.commit()
-            except Exception:
-                # Another worker booked it, or the claim failed; undo only
-                # this savepoint so the outer provisioning transaction stays
-                # usable (a full db.rollback() would poison every later flush).
-                with contextlib.suppress(Exception):
-                    nested.rollback()
-                continue
-            log.info("Claimed warm desktop session=%s container=%s", session.id, container_id)
-            return container_id
-        spec = ContainerSpec(f"kali-{uuid.uuid4()}", settings().kali_image, session.network_id, "KALI", session.id, settings().kali_cpu, settings().kali_memory_mb)
-        runtime_id = self.runtime.create_container(spec)
-        db.add(LabInstance(session_id=session.id, instance_type="KALI", runtime_id=runtime_id, container_name=spec.name, image=spec.image))
-        self.runtime.start_container(runtime_id)
-        return runtime_id
 
     def reconcile(self, db: Session, session: LabSession) -> None:
         if aware(session.expires_at) <= utcnow() or session.status in ("STOPPING", "FINISHED") or stop_requested(db, session.id):
