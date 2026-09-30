@@ -24,7 +24,7 @@
 - Ubuntu 实机终端最终命令、多行/历史命令采集通过。
 - Firefox 实机最终输入与提交记录通过，密码隐藏；首次打开在原 40 秒脚本截止后才完成，后续单独验证成功。
 - 原生应用最终编辑、中文剪贴板、具名点击实机通过。点击查找优先使用 AT-SPI 点位查询，保留有界树遍历回退。
-- 本轮暂不处理用户已搁置的浏览器桌面 WebSocket 连接问题。
+- 冷启动改造时暂未处理桌面 WebSocket 连接；后续修复及验证见文末记录。
 
 ## 复测方法
 
@@ -40,3 +40,13 @@
 使用正常 Compose 文件及原 `.deploy/compose.vm.yml` 启动后端和编排服务，已撤下测试 Compose 覆盖。部署设置为 `KALI_IMAGE=cyberlab/kali:local`、`KALI_CPU=3`、`WORKER_INTERVAL=1`，Ubuntu 硬件仍为 4 vCPU / 4GB。闲置的独立 Kali 虚拟机已正常关机。旧预热日志迁移后，预热容器、停车网络和 warm 日志目录均已清理。
 
 正式镜像验收 Session：`1eed85ab-104f-4b2f-9110-8cf1a543fb7e`。性能未达标作为已知限制交付，不继续调整 Windows 安全设置或 Ubuntu 硬件。
+
+## 后续桌面连接修复（2026-09-30）
+
+原客户端在 WebSocket 握手中提供 `cyberlab-ticket` 和一次性票据，Nginx 将整项协议头清空，上游未选回浏览器提供的协议，导致连接失败。修复提交 `da88955` 改为客户端提供 `binary` 与票据；HTTP/HTTPS 网关只接受该格式，验证票据后向 websockify 传递 `binary`，并正常返回其选中的协议。票据仍不会转发给 Kali，也不写入 URL。
+
+前端类型检查、生产构建及 HTTP/HTTPS Nginx 配置检查通过。Ubuntu 前端编译过慢，部署采用同提交在本机构建的 `dist`，配合原前端 Nginx 配置打包为镜像；生产后端和 Kali 镜像不变。
+
+Edge 对实际 HTTPS 部署的必要验证通过：真实桌面像素、协商协议为 binary、主动断开后按钮重连、实验页 iframe 连接，以及已消费票据/无效票据拒绝。仅执行短交互验证，不进行长时间压测：两次纯键入到画面更新为 43ms、421ms；终端命令执行到画面变化另测为 2466ms、1726ms，包含命令执行及同步操作采集，不能与纯键入延迟混同。这些短测不代表所有负载下的延迟保证。
+
+回归检查在 `frontend/e2e/desktop-connection.spec.ts`，使用 `CYBERLAB_DESKTOP_FIXTURE` 指向私有的 `{session_id,token}` 文件，针对专用已就绪实验运行。可选 `terminal_ready=true` 要求先打开最大化的专用终端并关闭光标闪烁，用两次纯键入测量响应。修复后旧页面需要重新加载才能使用更新的客户端协议。
