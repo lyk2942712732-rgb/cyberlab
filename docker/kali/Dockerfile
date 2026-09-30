@@ -29,8 +29,8 @@ RUN chmod 755 /usr/local/bin/start-desktop \
     && cp /usr/share/themes/Default/xfwm4/*.xpm /usr/share/themes/Default/xfwm4/themerc /usr/share/themes/CyberLab/xfwm4/ \
     && chown -R student:student /var/lib/cyberlab \
     && fc-cache -f \
-    && gtk-update-icon-cache -f /usr/share/icons/Adwaita \
-    && gtk-update-icon-cache -f /usr/share/icons/hicolor
+    && gtk-update-icon-cache --include-image-data -f /usr/share/icons/Adwaita \
+    && gtk-update-icon-cache --include-image-data -f /usr/share/icons/hicolor
 USER student
 WORKDIR /home/student
 ENV DISPLAY=:1 HOME=/home/student

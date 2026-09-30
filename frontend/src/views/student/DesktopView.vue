@@ -77,7 +77,9 @@ async function connect() {
     rfb = new RFB(screen.value, url, { wsProtocols: ['binary', ticket] })
     const tuned = rfb as RFB & { qualityLevel: number; compressionLevel: number }
     tuned.qualityLevel = 5
-    tuned.compressionLevel = 6
+    // Prefer prompt updates on CPU-constrained desktops; LAN traffic is cheaper
+    // than spending more server CPU compressing every changed rectangle.
+    tuned.compressionLevel = 2
     rfb.scaleViewport = true
     rfb.resizeSession = false
     rfb.addEventListener('clipboard', receiveClipboard)

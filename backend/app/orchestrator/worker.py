@@ -4,9 +4,9 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import select, text
 from app.core.config import settings
-from app.core.db import SessionLocal
+from app.core.db import SessionLocal, aware, utcnow
 from app.core.limits import cache
-from app.models import ACTIVE_STATUSES, LabSession, TargetImage
+from app.models import ACTIVE_STATUSES, LabSession, SessionStopRequest, TargetImage
 from app.orchestrator.image_manager import ImageManager
 from app.orchestrator.lab_orchestrator import LabOrchestrator
 
@@ -20,12 +20,15 @@ class Worker:
         self.last_recovery = 0.0
         self.pool = ThreadPoolExecutor(max_workers=settings().max_active_sessions)
         self.pending = {}
+        self.next_health_check = {}
 
     def tick(self) -> None:
         # Per-record transactions plus SKIP LOCKED allow multiple workers and durable
         # recovery. Failed transactions leave the original command pending for retry.
         with SessionLocal() as db:
-            ids = list(db.scalars(select(LabSession.id).where(LabSession.status.in_(ACTIVE_STATUSES))))
+            sessions = list(db.execute(select(LabSession.id, LabSession.status, LabSession.expires_at, SessionStopRequest.session_id)
+                .outerjoin(SessionStopRequest, SessionStopRequest.session_id == LabSession.id)
+                .where(LabSession.status.in_(ACTIVE_STATUSES))))
         def reconcile_one(identifier: str):
             try:
                 with SessionLocal.begin() as db:
@@ -38,15 +41,27 @@ class Worker:
                     cache().setex(f"session:{identifier}:status", 120, status)
                 except Exception:
                     log.warning("Redis state cache unavailable; PostgreSQL remains authoritative")
+                return status
             except Exception:
                 log.exception("Session reconcile will retry session=%s", identifier)
         # Each admitted session has a worker slot, so one slow health check cannot
         # postpone cleanup of unrelated sessions. MAX_ACTIVE_SESSIONS bounds threads.
         for identifier, future in list(self.pending.items()):
             if future.done():
-                future.result()
+                status = future.result()
+                if status == "READY":
+                    self.next_health_check[identifier] = time.monotonic() + 5
+                else:
+                    self.next_health_check.pop(identifier, None)
                 del self.pending[identifier]
-        for identifier in ids:
+        active_ids = {row[0] for row in sessions}
+        self.next_health_check = {identifier: deadline for identifier, deadline in self.next_health_check.items() if identifier in active_ids}
+        for identifier, status, expires_at, stop_request in sessions:
+            # Admission/control still runs every tick. Only steady-state Docker
+            # inspection is paced; stop/reset/expiry always bypass this delay.
+            if (status == "READY" and stop_request is None and aware(expires_at) > utcnow()
+                    and time.monotonic() < self.next_health_check.get(identifier, 0)):
+                continue
             if identifier not in self.pending:
                 self.pending[identifier] = self.pool.submit(reconcile_one, identifier)
         if time.monotonic() - self.last_recovery >= 60:
