@@ -18,6 +18,7 @@ from Xlib.protocol import rq
 
 from agent import request
 from click_event import record_click
+from edit_event import CompletedEdit
 
 # A killed supervisor must not leave this observer running.
 parent = os.getppid()
@@ -28,9 +29,6 @@ if parent == 1 or os.getppid() != parent:
 Atspi.init()
 Atspi.set_timeout(300, 600)
 clicks = queue.Queue(maxsize=32)
-focused = None
-dirty = False
-last_value = None
 failed = False
 control = display.Display()
 connection = display.Display()
@@ -68,31 +66,24 @@ def text(accessible):
     return Atspi.Text.get_text(interface, 0, count)
 
 
-def flush_edit():
-    global dirty, last_value
-    if focused is None or not dirty:
-        return
-    dirty = False
-    details = info(focused)
-    # Web fields are read from the DOM by the browser adapter, not inferred here.
-    if 'firefox' in details['app'].lower():
-        return
-    value = text(focused)
-    if value is not None and value != last_value:
-        emit('ui.change', {**details, 'value': value, 'completion': 'focus_left_or_clicked'})
-        last_value = value
+def describe_edit(accessible):
+    # Terminal output is not an edit; Firefox fields belong to the DOM adapter.
+    # Decide while the widget is alive, avoiding lookups after its app closes.
+    if not accessible.get_state_set().contains(Atspi.StateType.EDITABLE):
+        return None
+    details = info(accessible)
+    return None if 'firefox' in details['app'].lower() else details
+
+
+edits = CompletedEdit(describe_edit, text, emit)
 
 
 def on_event(event):
-    global focused, dirty, last_value, failed
     try:
         if event.type.startswith('object:state-changed:focused') and event.detail1:
-            flush_edit()
-            focused, dirty = event.source, False
-            # No text is retained on focus/keystrokes. Read only on completion.
-            last_value = None
-        elif event.type.startswith('object:text-changed') and event.source == focused:
-            dirty = True
+            edits.focus(event.source)
+        elif event.type.startswith('object:text-changed'):
+            edits.changed(event.source)
     except Exception:
         # Accessibility failures are reported as partial coverage, never guessed.
         report_failure()
@@ -184,7 +175,7 @@ def poll():
                 x, y, button = clicks.get_nowait()
             except queue.Empty:
                 break
-            flush_edit()
+            edits.flush()
             record_click(x, y, button, target_at, window_title, emit)
     except Exception:
         report_failure()
