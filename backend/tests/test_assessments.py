@@ -7,7 +7,7 @@ import httpx
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
-from app.assessment import collect_evidence, evaluate, redact, validate_report
+from app.assessment import collect_evidence, evaluate, learning_reference, redact, validate_report
 from app import assessment_worker
 from app.core.config import settings
 from app.core.db import utcnow
@@ -139,8 +139,41 @@ def test_deepseek_request_and_output_validation(monkeypatch):
     payload = post.call_args.kwargs["json"]
     assert payload["model"] == "deepseek-flash"
     assert payload["thinking"] == {"type": "enabled"}
-    assert payload["reasoning_effort"] == "low"
+    assert payload["reasoning_effort"] == "high"
     assert payload["response_format"] == {"type": "json_object"}
+
+
+@pytest.mark.parametrize("field", ["summary", "stage", "criterion", "next_steps", "limitations"])
+def test_internal_identifiers_stay_in_citations_not_student_prose(field):
+    evidence = {"events": [{"id": "g1:e1"}], "submissions": []}
+    value = report()
+    assert validate_report(value, evidence)["approach"][0]["evidence_ids"] == ["g1:e1"]
+    text = "你的操作已记录（g1:e1）。"
+    if field == "stage":
+        value["approach"][0]["title"] = text
+    elif field == "criterion":
+        value["criteria"][0]["text"] = text
+    elif field in ("next_steps", "limitations"):
+        value[field] = [text]
+    else:
+        value[field] = text
+    with pytest.raises(ValueError, match="Internal evidence identifiers"):
+        validate_report(value, evidence)
+
+
+def test_reference_retains_lab_content_without_shared_evaluator_footer():
+    original = {"writeup": "# SQL\n步骤与常见失败\n## 学习验收与评估约定\n评估器事件规则"}
+    assert learning_reference(original)["writeup"] == "# SQL\n步骤与常见失败"
+    assert "评估器事件规则" in original["writeup"]
+    assert learning_reference({"writeup": "自定义题解"})["writeup"] == "自定义题解"
+
+
+@pytest.mark.parametrize("internal", ["correct=true", "capture_complete", "flag_correct"])
+def test_internal_status_fields_are_not_student_feedback(internal):
+    value = report()
+    value["summary"] = "本次判题 " + internal
+    with pytest.raises(ValueError, match="Internal evidence identifiers"):
+        validate_report(value, {"events": [{"id": "g1:e1"}], "submissions": []})
 
 
 def test_worker_persists_success_and_recovers_failure(db, lab, users, runtime, monkeypatch):
