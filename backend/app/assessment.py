@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.models import Submission
 from app.orchestrator.client import OrchestratorClient
 
-PROMPT_VERSION = "1"
+PROMPT_VERSION = "2"
 SENSITIVE = re.compile(r"password|passwd|pwd|token|secret|api.?key|authorization|cookie", re.I)
 
 
@@ -145,11 +145,19 @@ terminal.submit 只有命令提交，没有输出；web.submit 是提交尝试�
 点击、输入、URL、Flag 字样均不能替代结果证据。平台 correct=true 仅证明提交了正确 Flag，不证明理解。
 缺少响应正文、解释、修复操作或采集不完整时标注证据不足，不把缺失证据直接判成失败或零分。
 接受等价方法和正常试错，不按点击数、耗时或是否严格复现题解评价能力。不给最终总分，不改变 Flag 成绩。
+评价方法前，逐项核对教师题解中的前提、预期结果与常见失败原因，再与实际输入比较。
+SQL、命令、路径等输入中的空格、引号、编码和大小写可能决定语义；引用时逐字符保留，
+禁止替学生自动纠错或把错误输入归为等价解法。若输入与参考的差异会改变语义，应指出具体差异，
+解释其可能影响；这只评价已记录的方法，不能在没有响应时断言实际执行结果。
+建议中的修正输入必须来自教师参考或可核对的语义分析，不能直接复制学生的错误输入。
+例如 admin ' -- 与 admin' -- 不相同：前者在闭合引号前多一个空格，可能匹配不同用户名。
 分项固定四项：baseline 正常行为基线、method 解题方法、verification 结果验证、understanding 原理与修复。
 每项必须且仅出现一次。对学生能力作 achieved/partial/needs_work 判断时，必须引用给定证据 id；
 只有推测或缺少数据时用 insufficient_evidence。建议可不引用，但不得把建议写成学生已做的事实。
 evidence_ids 只使用给定的 g代次:e序号 或 submission:UUID，禁止编造；文字中不重复列出编号。
 密钥、密码、令牌与实际 Flag 不得复述。不输出内部思考过程，只给简短、可核对的解释。
+被隐藏的值视为未知，不得拿题解的示例值补全，也不得推断它正确或错误。
+用学生容易理解的语言，不在反馈中暴露 capture_complete、flag_correct 等内部字段名。
 返回且只返回 JSON，严格符合附带的 JSON Schema。四个分项以及 summary、approach、strengths、
 improvements、next_steps、limitations 都必须存在。每份报告控制在约 1200 中文字内。"""
 
@@ -178,7 +186,7 @@ def evaluate(reference, evidence):
                     for key in ("baseline", "method", "verification", "understanding")],
                 "strengths": [], "improvements": [], "next_steps": ["重新启动实验，完成操作后结束实验再查看复盘。"],
                 "limitations": ["可能是环境启动失败、未进行操作或采集不可用；不能据此判断你的能力。"]}
-    payload = {"model": config.deepseek_model, "thinking": {"type": "disabled"},
+    payload = {"model": config.deepseek_model, "thinking": {"type": "enabled"}, "reasoning_effort": "low",
                "response_format": {"type": "json_object"}, "max_tokens": 6000,
                "messages": [{"role": "system", "content": SYSTEM + "\nJSON Schema:\n" + json.dumps(Report.model_json_schema(), ensure_ascii=False)},
                             {"role": "user", "content": json.dumps({"reference": redact(reference), "evidence": evidence}, ensure_ascii=False)}]}

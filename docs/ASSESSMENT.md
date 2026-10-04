@@ -23,7 +23,7 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 
 启动 Compose 的 `assessment` 服务，命令为 `python -m app.assessment_worker`。它与 backend/orchestrator 共用应用镜像，但单独运行、限制为 0.5 核和 384 MB，没有 Docker socket 或操作日志卷挂载。只通过内部编排接口读取采集。密钥仅传入 assessment 服务。
 
-默认调用 `/chat/completions`，关闭 thinking 模式以缩短反馈时间，JSON 输出上限 6000 tokens。模型及地址可配置；服务错误仅保存通用原因，不记录模型请求、响应正文或密钥。当前模型名以 DeepSeek 官方文档与模型列表为准，部署时已核对 `deepseek-flash`。
+默认调用 `/chat/completions`，使用 thinking 的 low 强度核对操作语义，生成上限 6000 tokens；只保存最终结构化反馈，不保存或展示模型的内部推理。模型及地址可配置；服务错误仅保存通用原因，不记录模型请求、响应正文或密钥。当前模型名及参数以 [DeepSeek 官方文档](https://api-docs.deepseek.com/guides/thinking_mode/)与模型列表为准，部署时已核对 `deepseek-flash`。
 
 ## 实现和边界
 
@@ -35,6 +35,7 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 - 一个模型请求完成过程解释和评价；Pydantic 校验 JSON，拒绝不存在的证据引用、重复或遗漏的评分维度。无引用的确定性分项改为证据不足。存在引用不代表模型解释必然正确，学生仍可展开依据核对。
 - 没有任何操作或判题记录时生成明确的“证据不足”说明，不调用模型；采集读取失败会重试，不伪装成空记录。
 - 采集通常不含终端输出与网页响应正文。模型被明确要求不把提交当作成功、不把推测当作真实心理；未记录解释与修复时无法确认理解程度。
+- 评价方法时同时核对题解的常见失败原因，保留 SQL、命令等输入中有语义意义的空格与引号，区分错误输入和等价方法。提示约束不能完全消除模型误读。
 - 任务每三秒检查一次。调用超时、格式错误、无效引用会有限重试；运行中断十分钟后恢复任务。单个进程串行处理，繁忙时会排队。没有承诺固定完成时间。
 
 ## API

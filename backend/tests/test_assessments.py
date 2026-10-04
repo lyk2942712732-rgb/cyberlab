@@ -138,7 +138,8 @@ def test_deepseek_request_and_output_validation(monkeypatch):
     assert result["usage"]["total_tokens"] == 100
     payload = post.call_args.kwargs["json"]
     assert payload["model"] == "deepseek-flash"
-    assert payload["thinking"] == {"type": "disabled"}
+    assert payload["thinking"] == {"type": "enabled"}
+    assert payload["reasoning_effort"] == "low"
     assert payload["response_format"] == {"type": "json_object"}
 
 
