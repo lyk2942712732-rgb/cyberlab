@@ -5,8 +5,9 @@ import { get, post, put, remove } from '../../api/http'
 import type { Lab, TargetImage } from '../../types'
 import { difficulty } from '../../types'
 import StatusTag from '../../components/StatusTag.vue'
+import MarkdownContent from '../../components/MarkdownContent.vue'
 const labs = ref<Lab[]>([]), images = ref<TargetImage[]>([]), dialog = ref(false), busy = ref(false), saving = ref(false), editing = ref('')
-const defaults = () => ({ name: '', description: '', objective: '', steps: '', category: 'Web 安全', difficulty: 'BEGINNER', target_image_id: '', target_port: 80, duration_minutes: 120, cpu_limit: 1, memory_limit: 512, flag: '', status: 'DRAFT' })
+const defaults = () => ({ name: '', description: '', objective: '', steps: '', writeup: '', category: 'Web 安全', difficulty: 'BEGINNER', target_image_id: '', target_port: 80, duration_minutes: 120, cpu_limit: 1, memory_limit: 512, flag: '', status: 'DRAFT' })
 const form = reactive(defaults())
 async function load() { busy.value = true; try { [labs.value, images.value] = await Promise.all([get<Lab[]>('/labs'), get<TargetImage[]>('/admin/images')]) } catch {} finally { busy.value = false } }
 async function open(id = '') { editing.value = id; Object.assign(form, defaults()); if (id) { try { const lab = await get<Lab>(`/admin/labs/${id}`); for (const key of Object.keys(defaults()) as (keyof typeof form)[]) (form as Record<string, unknown>)[key] = lab[key] } catch { return } } dialog.value = true }
@@ -65,6 +66,15 @@ onMounted(load)
 <el-form-item label="实验步骤（Markdown）">
 <el-input v-model="form.steps" type="textarea" :rows="5"/>
 </el-form-item>
+<el-form-item label="参考解答 / 解题思路（Markdown）">
+<el-input v-model="form.writeup" type="textarea" :rows="12" maxlength="100000" placeholder="填写复现步骤、预期结果、常见误区、修复思路与评估要点"/>
+</el-form-item>
+<p class="muted small">发布后学生可在实验页主动查看。请写明解题过程与验收证据，避免直接填入固定 Flag。</p>
+<el-collapse v-if="form.writeup">
+<el-collapse-item title="预览参考解答" name="writeup">
+<div class="markdown-preview"><MarkdownContent :content="form.writeup"/></div>
+</el-collapse-item>
+</el-collapse>
 <div class="form-grid">
 <el-form-item label="靶机镜像" required>
 <el-select v-model="form.target_image_id" filterable class="full-width" placeholder="请选择已导入的镜像">

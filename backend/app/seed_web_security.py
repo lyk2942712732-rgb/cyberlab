@@ -5,6 +5,7 @@ from pathlib import Path
 from sqlalchemy import select
 from app.core.db import SessionLocal
 from app.models import Chapter, Course, LabTemplate, Lesson, TargetImage
+from app.writeups import reference
 
 CATALOG = json.loads((Path(__file__).parent / "data" / "web_security.json").read_text(encoding="utf-8"))
 SOURCE = "https://top10.owasp.org/2025/"
@@ -44,6 +45,8 @@ def seed(db, image_map):
                               duration_minutes=90, cpu_limit=0.5, memory_limit=128,
                               difficulty="INTERMEDIATE" if item["slug"] in ("supply", "integrity", "ssrf", "exception") else "BEGINNER")
             db.add(lab); db.flush()
+        if not lab.writeup:
+            lab.writeup = reference(item["slug"])
         lesson = db.scalar(select(Lesson).where(Lesson.chapter_id == chapter.id, Lesson.title == item["title"]))
         if not lesson:
             content = (f"# {item['title']}\n\n对应分类：**{item['category']}**\n\n## 原理与边界\n\n{item['concept']}"

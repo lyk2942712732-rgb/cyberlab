@@ -7,6 +7,7 @@ import type { Lab, LabSession } from '../../types'
 import StatusTag from '../../components/StatusTag.vue'
 import MarkdownContent from '../../components/MarkdownContent.vue'
 import ResourcePanel from '../../components/ResourcePanel.vue'
+import LabWriteup from '../../components/LabWriteup.vue'
 const route = useRoute(), session = ref<LabSession>(), lab = ref<Lab>(), flag = ref(''), busy = ref(false), now = ref(Date.now()), desktopKey = ref(0)
 let timer: ReturnType<typeof setInterval> | undefined, poll: ReturnType<typeof setTimeout> | undefined, disposed = false
 const expanded = ref(false)
@@ -63,6 +64,8 @@ onBeforeUnmount(() => { disposed = true; clearInterval(timer); clearTimeout(poll
 </div>
 <h3>操作指引</h3>
 <MarkdownContent :content="lab?.steps"/>
+<div class="divider"/>
+<LabWriteup v-if="session?.lab_template_id" :lab-id="session.lab_template_id"/>
 </aside>
 <section class="desktop-panel" :class="{ 'desktop-panel-expanded': expanded }">
 <header>

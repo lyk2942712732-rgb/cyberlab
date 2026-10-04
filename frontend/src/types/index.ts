@@ -2,7 +2,8 @@ export interface User { id: string; username: string; real_name: string; student
 export interface Lesson { id: string; chapter_id: string; title: string; content?: string; sort_order: number; status: string; related_lab_id: string | null; course_id?: string }
 export interface Chapter { id: string; course_id: string; title: string; sort_order: number; lessons: Lesson[] }
 export interface Course { id: string; name: string; description: string; status: string; chapters: Chapter[] }
-export interface Lab { id: string; name: string; description: string; objective: string; steps: string; category: string; difficulty: string; target_image_id: string; target_port: number; duration_minutes: number; cpu_limit: number; memory_limit: number; status: string; flag?: string }
+export interface Lab { id: string; name: string; description: string; objective: string; steps: string; category: string; difficulty: string; target_image_id: string; target_port: number; duration_minutes: number; cpu_limit: number; memory_limit: number; status: string; flag?: string; writeup?: string }
+export interface LabWriteup { schema_version: number; lab_id: string; title: string; format: 'markdown'; content: string; updated_at: string }
 export interface Instance { id: string; runtime_id: string; instance_type: string; status: string; ip_address: string }
 export interface LabSession { id: string; user_id: string; lab_template_id: string; lab_name: string; lab: Lab; status: string; target_ip: string | null; started_at: string; expires_at: string; finished_at: string | null; error: string | null; instances: Instance[]; student?: User }
 export interface Score { lab_id: string; lab_name: string; score: number; completed: boolean; completed_at: string | null; submissions_count: number; attempted: boolean }

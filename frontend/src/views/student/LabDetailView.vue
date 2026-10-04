@@ -5,6 +5,7 @@ import { get, post } from '../../api/http'
 import type { Lab, LabSession } from '../../types'
 import { difficulty } from '../../types'
 import MarkdownContent from '../../components/MarkdownContent.vue'
+import LabWriteup from '../../components/LabWriteup.vue'
 const route = useRoute(), router = useRouter(), lab = ref<Lab>(), busy = ref(false)
 onMounted(async () => { try { lab.value = await get<Lab>(`/labs/${route.params.id}`) } catch {} })
 async function start() { busy.value = true; try { const session = await post<LabSession>(`/labs/${route.params.id}/sessions`); router.push(`/sessions/${session.id}`) } catch {} finally { busy.value = false } }
@@ -30,6 +31,8 @@ async function start() { busy.value = true; try { const session = await post<Lab
 <div class="divider"/>
 <h2>实验说明</h2>
 <MarkdownContent :content="lab.steps"/>
+<div class="divider"/>
+<LabWriteup :lab-id="lab.id"/>
 </article>
 <aside class="panel lab-summary">
 <h2>启动实验环境</h2>

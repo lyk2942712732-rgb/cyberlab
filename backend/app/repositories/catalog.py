@@ -32,5 +32,6 @@ class Repository:
 
 def public(obj, exclude=()) -> dict:
     # Never serialize password hashes, uploaded paths or submitted/expected flags implicitly.
-    hidden = {"password_hash", "flag", "submitted_flag", "upload_path", *exclude}
+    # Long reference solutions are fetched explicitly, not on every session poll.
+    hidden = {"password_hash", "flag", "submitted_flag", "upload_path", "writeup", *exclude}
     return {col.name: getattr(obj, col.name) for col in obj.__table__.columns if col.name not in hidden}

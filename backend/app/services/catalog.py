@@ -55,7 +55,14 @@ class CatalogService:
         result = public(lab)
         if include_flag and user.role == "ADMIN":
             result["flag"] = lab.flag
+            result["writeup"] = lab.writeup
         return result
+
+    def writeup(self, identifier: str, user: User) -> dict:
+        self.lab(identifier, user)  # Same publication/access rules as the lab.
+        lab = self.repo.get(LabTemplate, identifier)
+        return {"schema_version": 1, "lab_id": lab.id, "title": lab.name,
+                "format": "markdown", "content": lab.writeup, "updated_at": lab.updated_at}
 
     def save(self, model, data: CourseInput | ChapterInput | LessonInput | LabInput, identifier: str | None = None) -> dict:
         values = data.model_dump()
@@ -66,6 +73,8 @@ class CatalogService:
             if values["related_lab_id"]:
                 self.repo.get(LabTemplate, values["related_lab_id"])
         if model is LabTemplate:
+            if identifier and "writeup" not in data.model_fields_set:
+                values.pop("writeup", None)  # Older clients must preserve reference edits.
             if identifier:
                 self.db.scalar(select(LabTemplate).where(LabTemplate.id == identifier).with_for_update())
             # Same lock used by ImageManager.delete prevents delete/association races.

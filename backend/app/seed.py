@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.core.db import SessionLocal
 from app.core.security import passwords
 from app.models import Chapter, Course, LabTemplate, Lesson, TargetImage, User
+from app.writeups import reference
 
 LESSON = """# SQL 注入原理
 
@@ -84,6 +85,8 @@ def seed(image_id: str | None = None):
                 db.add(lab)
                 db.flush()
             lesson.related_lab_id = lab.id
+            if not lab.writeup:
+                lab.writeup = reference("sqli-basic")
         print("Demo users and theory course are ready." + (" Demo lab linked." if image_id else " Upload the target, then re-run with --demo-image-id to link the demo lab."))
 
 

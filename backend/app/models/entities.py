@@ -75,6 +75,7 @@ class LabTemplate(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     objective: Mapped[str] = mapped_column(Text, default="")
     steps: Mapped[str] = mapped_column(Text, default="")
+    writeup: Mapped[str] = mapped_column(Text, default="", server_default="")
     category: Mapped[str] = mapped_column(String(64), default="Web 安全")
     difficulty: Mapped[str] = mapped_column(String(20), default="BEGINNER")
     target_image_id: Mapped[str] = mapped_column(ForeignKey("target_images.id"), index=True)

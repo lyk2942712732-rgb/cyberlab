@@ -42,6 +42,7 @@ class LabInput(Input):
     description: str = Field(default="", max_length=20000)
     objective: str = Field(default="", max_length=20000)
     steps: str = Field(default="", max_length=50000)
+    writeup: str = Field(default="", max_length=100000)
     category: str = Field(default="Web 安全", max_length=64)
     difficulty: Literal["BEGINNER", "INTERMEDIATE", "ADVANCED"] = "BEGINNER"
     target_image_id: str

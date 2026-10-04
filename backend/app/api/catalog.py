@@ -38,3 +38,8 @@ def labs(db: DB, user: CurrentUser):
 @router.get("/labs/{identifier}")
 def lab(identifier: str, db: DB, user: CurrentUser):
     return {"data": CatalogService(db).lab(identifier, user)}
+
+
+@router.get("/labs/{identifier}/writeup")
+def writeup(identifier: str, db: DB, user: CurrentUser):
+    return {"data": CatalogService(db).writeup(identifier, user)}
