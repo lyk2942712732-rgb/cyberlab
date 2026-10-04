@@ -6,8 +6,25 @@ from app.schemas.inputs import FlagInput
 from app.services.sessions import SessionService
 from app.services.scores import ScoreService
 from app.orchestrator.client import OrchestratorClient
+from app.services.assessments import AssessmentService
 
 router = APIRouter(tags=["Sessions"])
+
+
+@router.get("/me/assessments")
+def assessments(db: DB, user: CurrentUser):
+    return {"data": AssessmentService(db).history(user)}
+
+
+@router.get("/lab-sessions/{identifier}/assessment")
+def assessment(identifier: str, db: DB, user: CurrentUser):
+    return {"data": AssessmentService(db).get(identifier, user)}
+
+
+@router.post("/lab-sessions/{identifier}/assessment", status_code=202)
+def request_assessment(identifier: str, db: DB, user: CurrentUser):
+    limit(f"assessment:{user.id}", 5, 60)
+    return {"data": AssessmentService(db).request(identifier, user)}
 
 
 @router.post("/labs/{identifier}/sessions", status_code=202)

@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     worker_interval: float = Field(default=1, ge=1, le=30)
     health_timeout: int = Field(default=90, ge=5, le=180)
     testing: bool = False
+    assessment_enabled: bool = True
+    deepseek_api_key: str = Field(default="", repr=False)
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-flash"
 
 
 @lru_cache

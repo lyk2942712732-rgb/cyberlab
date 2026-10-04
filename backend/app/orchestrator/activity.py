@@ -63,7 +63,7 @@ def events(identifier, generation=None, after=0, limit=100):
     if any((folder / name).is_symlink() for name in ('events.sqlite3', 'events.sqlite3-wal', 'events.sqlite3-shm')):
         raise ValueError('invalid journal path')
     if not path.is_file():
-        return {'state': summary, 'events': [], 'generations': generations, 'next': None}
+        return {'state': summary, 'events': [], 'generations': available, 'next': None}
     with sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=1) as db:
         deadline = time.monotonic() + 1
         db.set_progress_handler(lambda: int(time.monotonic() > deadline), 1000)

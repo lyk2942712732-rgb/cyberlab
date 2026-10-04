@@ -8,6 +8,7 @@ import StatusTag from '../../components/StatusTag.vue'
 import MarkdownContent from '../../components/MarkdownContent.vue'
 import ResourcePanel from '../../components/ResourcePanel.vue'
 import LabWriteup from '../../components/LabWriteup.vue'
+import AssessmentPanel from '../../components/AssessmentPanel.vue'
 const route = useRoute(), session = ref<LabSession>(), lab = ref<Lab>(), flag = ref(''), busy = ref(false), now = ref(Date.now()), desktopKey = ref(0)
 let timer: ReturnType<typeof setInterval> | undefined, poll: ReturnType<typeof setTimeout> | undefined, disposed = false
 const expanded = ref(false)
@@ -53,6 +54,7 @@ onBeforeUnmount(() => { disposed = true; clearInterval(timer); clearTimeout(poll
 </div>
 <el-alert v-if="session?.error" :title="session.error" type="error" :closable="false" show-icon class="margin-bottom"/>
 <ResourcePanel v-if="session" :session-id="session.id" :status="session.status" :instance-key="session.instances.map(i => i.runtime_id).join(',')"/>
+<AssessmentPanel v-if="session && ['DESTROYED', 'FAILED'].includes(session.status)" :session-id="session.id" :session-status="session.status"/>
 <div class="experiment-layout">
 <aside class="panel experiment-guide">
 <h3>实验目标</h3>

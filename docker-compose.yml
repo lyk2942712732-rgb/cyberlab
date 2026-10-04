@@ -19,6 +19,7 @@ x-app: &app
     KALI_MEMORY_MB: ${KALI_MEMORY_MB:-2048}
     HEALTH_TIMEOUT: ${HEALTH_TIMEOUT:-90}
     WORKER_INTERVAL: ${WORKER_INTERVAL:-1}
+    ASSESSMENT_ENABLED: ${ASSESSMENT_ENABLED:-true}
 
 services:
   postgres:
@@ -94,6 +95,21 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
+
+  assessment:
+    <<: *app
+    command: [python, -m, app.assessment_worker]
+    environment:
+      <<: *app-env
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+    networks: [platform-net, database-net, lab-control-net]
+    mem_limit: 384m
+    cpus: 0.5
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      orchestrator: {condition: service_healthy}
 
   frontend:
     build: ./frontend

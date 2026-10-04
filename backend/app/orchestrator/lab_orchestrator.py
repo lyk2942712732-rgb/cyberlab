@@ -11,6 +11,7 @@ from app.models import LabInstance, LabSession, LabTemplate, TargetImage
 from app.orchestrator.base import RuntimeProvider
 from app.orchestrator.models import ContainerSpec, ProvisionCancelled, RuntimeFailure
 from app.orchestrator.network_manager import NetworkManager
+from app.services.assessments import enqueue
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class LabOrchestrator:
         session.status = "FINISHED"
         db.flush()
         session.status = "DESTROYED"
+        enqueue(db, session)
         log.info("Session destroyed session=%s", session.id)
 
     def provision(self, db: Session, session: LabSession) -> None:
@@ -133,6 +135,7 @@ class LabOrchestrator:
             try:
                 self.cleanup(db, session)
                 session.status = "FAILED"
+                enqueue(db, session)
             except Exception:
                 # Do not report a terminal state until leaked resources have been removed.
                 log.exception("Cleanup scheduled for retry session=%s", session.id)
