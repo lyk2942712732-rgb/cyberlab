@@ -19,11 +19,12 @@ from tests.test_sessions import start_ready
 
 
 def report():
-    return {"summary": "你尝试了修改输入，结果需要进一步核实。",
-            "approach": [{"title": "调整输入", "kind": "inferred", "text": "你可能在调整输入。", "evidence_ids": ["g1:e1"]}],
-            "criteria": [{"key": key, "verdict": "insufficient_evidence", "text": "需要更多证据。", "evidence_ids": []}
-                         for key in ("baseline", "method", "verification", "understanding")],
-            "strengths": [], "improvements": [], "next_steps": ["核实实际响应。"], "limitations": ["没有响应正文。"]}
+    return {"schema_version": 2, "summary": "你尝试了修改输入，实际结果尚无法确认。",
+            "path": [{"title": "调整输入", "text": "你修改了输入。", "evidence_ids": ["g1:e1"]}],
+            "reasoning": {"text": "从修改输入看，你可能在尝试改变查询边界。", "evidence_ids": ["g1:e1"]},
+            "criteria": [{"key": key, "verdict": "insufficient_evidence", "text": "需要对应结果。", "evidence_ids": []}
+                         for key in ("method", "verification")],
+            "suggestions": [{"text": "对比修改前后的响应。", "evidence_ids": []}], "limitations": []}
 
 
 @pytest.mark.parametrize("reason", ["stop", "expiry", "failure"])
@@ -116,11 +117,11 @@ def test_validation_rejects_fabricated_citations_and_missing_dimensions():
     value = report()
     assert validate_report(value, evidence)["summary"]
     wrong = copy.deepcopy(value)
-    wrong["approach"][0]["evidence_ids"] = ["g9:e999"]
+    wrong["path"][0]["evidence_ids"] = ["g9:e999"]
     with pytest.raises(ValueError):
         validate_report(wrong, evidence)
     wrong = copy.deepcopy(value)
-    wrong["criteria"][1]["key"] = "baseline"
+    wrong["criteria"][1]["key"] = "method"
     with pytest.raises(ValueError):
         validate_report(wrong, evidence)
     value["criteria"][0]["verdict"] = "achieved"
@@ -143,17 +144,21 @@ def test_deepseek_request_and_output_validation(monkeypatch):
     assert payload["response_format"] == {"type": "json_object"}
 
 
-@pytest.mark.parametrize("field", ["summary", "stage", "criterion", "next_steps", "limitations"])
+@pytest.mark.parametrize("field", ["summary", "stage", "criterion", "reasoning", "suggestions", "limitations"])
 def test_internal_identifiers_stay_in_citations_not_student_prose(field):
     evidence = {"events": [{"id": "g1:e1"}], "submissions": []}
     value = report()
-    assert validate_report(value, evidence)["approach"][0]["evidence_ids"] == ["g1:e1"]
+    assert validate_report(value, evidence)["path"][0]["evidence_ids"] == ["g1:e1"]
     text = "你的操作已记录（g1:e1）。"
     if field == "stage":
-        value["approach"][0]["title"] = text
+        value["path"][0]["title"] = text
     elif field == "criterion":
         value["criteria"][0]["text"] = text
-    elif field in ("next_steps", "limitations"):
+    elif field == "reasoning":
+        value[field]["text"] = text
+    elif field == "suggestions":
+        value[field][0]["text"] = text
+    elif field == "limitations":
         value[field] = [text]
     else:
         value[field] = text
@@ -223,3 +228,45 @@ def test_stale_jobs_recover_with_bounded_attempts(db, lab, users, runtime):
     db.commit()
     assert assessment_worker.claim(db) is None
     assert job.status == "FAILED"
+
+
+def test_optional_dimensions_and_duplicate_advice_are_omitted():
+    evidence = {"events": [{"id": "g1:e1"}], "submissions": []}
+    value = report()
+    value["criteria"].append({"key": "understanding", "verdict": "insufficient_evidence", "text": "未记录解释。", "evidence_ids": []})
+    value["criteria"].append({"key": "strategy", "verdict": "partial", "text": "你调整了输入。", "evidence_ids": ["g1:e1"]})
+    value["suggestions"].append({"text": "对比修改前后的响应！", "evidence_ids": ["g1:e1"]})
+    result = validate_report(value, evidence)
+    assert [c["key"] for c in result["criteria"]] == ["method", "verification", "strategy"]
+    assert len(result["suggestions"]) == 1
+    assert result["suggestions"][0]["evidence_ids"] == ["g1:e1"]
+    value["reasoning"]["evidence_ids"] = []
+    with pytest.raises(ValueError, match="Reasoning without supporting"):
+        validate_report(value, evidence)
+
+
+def test_legacy_report_upgrade_is_explicit_and_idempotent(db, lab, users, runtime):
+    from app.services.assessments import AssessmentService
+    session = start_ready(db, lab, users["student01"], runtime)
+    LabOrchestrator(runtime).stop(db, session)
+    db.commit()
+    job = db.get(LabAssessment, session.id)
+    old = {"summary": "历史反馈", "approach": []}
+    job.status, job.report = "COMPLETED", old
+    db.commit()
+    service = AssessmentService(db)
+    assert service.get(session.id, users["student01"])["status"] == "COMPLETED"
+    assert service.request(session.id, users["student01"])["status"] == "QUEUED"
+    job.attempts = 1
+    db.commit()
+    assert service.request(session.id, users["student01"])["status"] == "QUEUED"
+    assert job.attempts == 1 and job.report == old
+    job.status, job.report = "COMPLETED", report()
+    db.commit()
+    assert service.request(session.id, users["student01"])["status"] == "COMPLETED"
+
+
+def test_sql_placeholders_remain_readable_in_feedback():
+    assert redact("username = ? AND password = ?") == "username = ? AND password = ?"
+    assert redact("password = %s") == "password = %s"
+    assert "private123" not in redact("password = private123")

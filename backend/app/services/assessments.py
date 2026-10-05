@@ -1,6 +1,7 @@
 """Small persistent queue: one report per session, owned by that session's student."""
 from fastapi import HTTPException
 from sqlalchemy import select
+from app.assessment import REPORT_VERSION
 from app.core.config import settings
 from app.core.db import utcnow
 from app.models import LabAssessment, LabSession, LabTemplate
@@ -50,9 +51,12 @@ class AssessmentService:
         if not settings().assessment_enabled:
             raise HTTPException(503, "实验复盘暂未启用")
         job = enqueue(self.db, session)
-        if job.status == "FAILED":
+        outdated = job.status == "COMPLETED" and (job.report or {}).get("schema_version") != REPORT_VERSION
+        if job.status == "FAILED" or outdated:
             job.status, job.attempts, job.error = "QUEUED", 0, None
             job.available_at = utcnow()
+            if outdated:
+                job.completed_at = None
         self.db.commit()
         return describe(job, session, True)
 

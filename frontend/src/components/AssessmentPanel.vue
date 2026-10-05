@@ -1,16 +1,20 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import AssessmentPath from './AssessmentPath.vue'
 import { get, post } from '../api/http'
 import { date } from '../types'
 
 interface Item { text: string; evidence_ids: string[] }
+interface Stage extends Item { title: string; kind?: string }
+interface Criterion extends Item { key: string; verdict: string }
+interface Report {
+  schema_version?: number; summary: string; path?: Stage[]; reasoning?: Item; criteria: Criterion[]
+  suggestions?: Item[]; limitations: string[]
+  approach?: Stage[]; improvements?: Item[]; next_steps?: string[]
+}
 interface Assessment {
   status: string; enabled: boolean; error: string | null; model: string; completed_at: string | null
-  report: null | {
-    summary: string; approach: (Item & { title: string; kind: string })[]
-    criteria: (Item & { key: string; verdict: string })[]
-    strengths: Item[]; improvements: Item[]; next_steps: string[]; limitations: string[]
-  }
+  report: Report | null
   evidence: null | { flag_correct: boolean; events_read: number; events_used: number; truncated: boolean; capture_complete: boolean
     events: { id: string; type: string; timestamp: number; data: unknown }[]
     submissions: { id: string; correct: boolean; created_at: string }[] }
@@ -18,8 +22,24 @@ interface Assessment {
 const props = defineProps<{ sessionId: string; sessionStatus: string }>()
 const result = ref<Assessment>(), loading = ref(false), unavailable = ref(false), selected = ref<string[]>([])
 let timer: ReturnType<typeof setTimeout> | undefined, generation = 0, disposed = false
-const names: Record<string, string> = { baseline: '正常行为基线', method: '解题方法', verification: '结果验证', understanding: '原理与修复' }
-const verdicts: Record<string, string> = { achieved: '已展示', partial: '部分展示', needs_work: '需要改进', insufficient_evidence: '证据不足' }
+const names: Record<string, string> = { strategy: '排查与调整', method: '解题方法', verification: '结果验证', understanding: '原理解释' }
+const verdicts: Record<string, string> = { achieved: '已体现', partial: '部分体现', needs_work: '有待改进', insufficient_evidence: '暂无法判断' }
+const legacy = computed(() => !!result.value?.report && result.value.report.schema_version !== 2)
+const report = computed(() => {
+  const source = result.value?.report
+  if (!source) return null
+  if (!legacy.value) return { ...source, path: source.path || [], reasoning: source.reasoning!, suggestions: source.suggestions || [] }
+  const inferred = (source.approach || []).filter(item => item.kind === 'inferred')
+  return {
+    ...source,
+    path: (source.approach || []).filter(item => item.kind === 'observed'),
+    reasoning: { text: inferred.map(item => item.text).join('') || '这份历史报告未单独生成思路推断，更新报告后即可查看。',
+      evidence_ids: [...new Set(inferred.flatMap(item => item.evidence_ids))] },
+    criteria: source.criteria.filter(item => ['method', 'verification'].includes(item.key) ||
+      (item.verdict !== 'insufficient_evidence' && item.evidence_ids.length)).map(item => ({ ...item, key: item.key === 'baseline' ? 'strategy' : item.key })),
+    suggestions: source.next_steps?.length ? source.next_steps.map(text => ({ text, evidence_ids: [] })) : source.improvements || [],
+  }
+})
 const ended = () => ['DESTROYED', 'FAILED'].includes(props.sessionStatus)
 async function refresh() {
   const current = generation
@@ -51,33 +71,34 @@ function evidenceText(id: string) {
   <h2>实验复盘与反馈</h2>
   <p class="muted small">根据本次操作记录与参考解答生成，帮助你理解解题过程。分项评价不改变 Flag 成绩。</p>
   <p v-if="!ended()" class="muted">结束实验后，这里会自动生成你的复盘。</p>
-  <template v-else-if="result?.report && result.status === 'COMPLETED'">
-    <p class="assessment-summary">{{ result.report.summary }}</p>
-    <p class="small muted">{{ date(result.completed_at) }} · {{ result.model }} · 使用 {{ result.evidence?.events_used }} 条操作记录</p>
-    <p class="small">平台判题记录：{{ result.evidence?.flag_correct ? '本次有正确 Flag 提交' : '本次未记录到正确 Flag 提交' }}</p>
-    <h3>操作路径与可能思路</h3>
-    <div v-for="(stage, index) in result.report.approach" :key="index" class="assessment-item">
-      <strong>{{ stage.title }}</strong> <el-tag size="small" :type="stage.kind === 'observed' ? 'info' : 'warning'">{{ stage.kind === 'observed' ? '已记录操作' : '可能的思路' }}</el-tag>
-      <p>{{ stage.text }}</p>
-      <el-button v-if="stage.evidence_ids.length" link type="primary" @click="selected = stage.evidence_ids">查看依据</el-button>
-    </div>
+  <template v-else-if="report && result?.status === 'COMPLETED'">
+    <p class="assessment-summary">{{ report.summary }}</p>
+    <div v-if="legacy && result.enabled" class="legacy-note"><span>这份历史报告可更新为精简版，补充连贯的思路推断。</span><el-button link type="primary" :loading="loading" @click="request">更新报告</el-button></div>
+    <details class="journey" open>
+      <summary class="journey-toggle"><h3>操作路径与可能思路</h3><span class="journey-chevron" aria-hidden="true">⌄</span></summary>
+      <div class="journey-layout">
+        <AssessmentPath :steps="report.path" @evidence="selected = $event" />
+        <aside class="reasoning" aria-label="可能思路">
+          <div class="reasoning-heading"><h4>可能思路</h4><span>AI 推断</span></div>
+          <p>{{ report.reasoning.text }}</p>
+          <el-button v-if="report.reasoning.evidence_ids.length" link type="primary" @click="selected = report.reasoning.evidence_ids">查看推断依据</el-button>
+        </aside>
+      </div>
+    </details>
     <h3>分项评价</h3>
     <div class="assessment-grid">
-      <div v-for="item in result.report.criteria" :key="item.key" class="assessment-item">
-        <strong>{{ names[item.key] }}</strong> <el-tag size="small" :type="item.verdict === 'achieved' ? 'success' : item.verdict === 'needs_work' ? 'warning' : 'info'">{{ verdicts[item.verdict] }}</el-tag>
+      <div v-for="item in report.criteria" :key="item.key" class="assessment-item">
+        <div class="criterion-heading"><strong>{{ names[item.key] || item.key }}</strong><el-tag size="small" :type="item.verdict === 'achieved' ? 'success' : item.verdict === 'needs_work' ? 'warning' : 'info'">{{ verdicts[item.verdict] }}</el-tag></div>
         <p>{{ item.text }}</p>
         <el-button v-if="item.evidence_ids.length" link type="primary" @click="selected = item.evidence_ids">查看依据</el-button>
       </div>
     </div>
-    <template v-for="(items, key) in { strengths: result.report.strengths, improvements: result.report.improvements }" :key="key">
-      <h3 v-if="items.length">{{ key === 'strengths' ? '做得好的地方' : '可以改进的地方' }}</h3>
-      <div v-for="(item, index) in items" :key="index" class="assessment-item">
-        <p>{{ item.text }} <el-button v-if="item.evidence_ids.length" link type="primary" @click="selected = item.evidence_ids">查看依据</el-button></p>
-      </div>
-    </template>
-    <h3 v-if="result.report.next_steps.length">下一步建议</h3>
-    <ul><li v-for="(text, index) in result.report.next_steps" :key="index">{{ text }}</li></ul>
-    <div v-if="result.report.limitations.length" class="assessment-limitations"><strong>本次评价的依据与限制</strong><ul><li v-for="(text, index) in result.report.limitations" :key="index">{{ text }}</li></ul></div>
+    <h3 v-if="report.suggestions.length">改进建议</h3>
+    <ul class="suggestions"><li v-for="(item, index) in report.suggestions" :key="index">
+      <p>{{ item.text }} <el-button v-if="item.evidence_ids.length" link type="primary" @click="selected = item.evidence_ids">查看依据</el-button></p>
+    </li></ul>
+    <p v-if="report.limitations.length" class="assessment-limitations small muted">{{ [...new Set(report.limitations)].join(' ') }}</p>
+    <p class="assessment-meta small muted">{{ date(result.completed_at) }} · 本次实验反馈</p>
   </template>
   <div v-else-if="unavailable" role="alert"><p>暂时无法读取复盘。</p><el-button @click="refresh">刷新复盘</el-button></div>
   <p v-else-if="result && !result.enabled" class="muted">实验复盘暂未启用。</p>
@@ -91,13 +112,34 @@ function evidenceText(id: string) {
 </template>
 
 <style scoped>
-.assessment-panel { margin-top: 24px; }
-.assessment-panel p, .assessment-panel li { line-height: 1.8; overflow-wrap: anywhere; }
-.assessment-summary { font-size: 15px; }
-.assessment-item { padding: 14px 0; border-bottom: 1px solid var(--rule); }
-.assessment-item p { margin: 8px 0; }
-.assessment-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
-.assessment-limitations { padding: 16px; margin-top: 20px; background: var(--surface-2); border-radius: 8px; }
+.assessment-panel { margin-top: 24px; container-type: inline-size; }
+.assessment-panel p, .assessment-panel li { line-height: 1.85; overflow-wrap: anywhere; }
+.assessment-panel h3 { font-size: 15px; margin: 26px 0 14px; }
+.assessment-summary { font-size: 15px; color: var(--ink); max-width: 90ch; margin: 18px 0 24px; }
+.journey { border-block: 1px solid var(--rule); padding-bottom: 0; }
+.journey[open] { padding-bottom: 22px; }
+.journey-toggle { display: flex; align-items: center; justify-content: space-between; gap: 20px; cursor: pointer; padding: 17px 0; list-style: none; }
+.journey-toggle::-webkit-details-marker { display: none; }
+.assessment-panel .journey-toggle h3 { margin: 0; }
+.journey-chevron { font-size: 22px; color: var(--muted); transform: rotate(-90deg); line-height: 1; }
+.journey[open] .journey-chevron { transform: rotate(0); }
+.journey-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(240px, 1fr); gap: 32px; align-items: start; padding-top: 6px; }
+.reasoning { border-left: 2px solid var(--accent-line); padding: 2px 0 4px 22px; min-width: 0; }
+.reasoning-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.reasoning-heading h4 { margin: 0; font-size: 14px; }
+.reasoning-heading span { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.reasoning p { margin: 12px 0; color: var(--ink-2); }
+.assessment-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; }
+.assessment-item { padding: 2px 0 16px; border-bottom: 1px solid var(--rule); min-width: 0; }
+.criterion-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.assessment-item p { margin: 10px 0; }
+.suggestions { margin: 0; padding-left: 20px; max-width: 100ch; }
+.suggestions li::marker { color: var(--accent); }
+.suggestions p { margin: 10px 0; }
+.assessment-limitations { margin: 20px 0 0; }
+.assessment-meta { margin: 20px 0 0; font-size: 11px; }
+.legacy-note { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; color: var(--muted); font-size: 12px; }
 .assessment-evidence { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--surface-2); max-height: 320px; overflow: auto; }
-@media (max-width: 700px) { .assessment-grid { grid-template-columns: 1fr; } }
+@container (max-width: 720px) { .journey-layout { grid-template-columns: 1fr; gap: 24px; } .reasoning { padding-left: 16px; } }
+@container (max-width: 480px) { .assessment-grid { grid-template-columns: 1fr; } }
 </style>
