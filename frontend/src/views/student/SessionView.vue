@@ -31,7 +31,7 @@ async function command(action: string) {
 async function submit() {
   if (!flag.value.trim()) return ElMessage.warning('请输入 Flag')
   busy.value = true
-  try { const result = await post<{correct: boolean; score: number}>(`/lab-sessions/${route.params.id}/submit`, { flag: flag.value }); if (result.correct) { ElMessage.success('回答正确！100 分已记录'); flag.value = '' } else ElMessage.warning('Flag 不正确，再检查一下实验结果。') } catch {} finally { busy.value = false }
+  try { const result = await post<{correct: boolean; score: number}>(`/lab-sessions/${route.params.id}/submit`, { flag: flag.value }); if (result.correct) { ElMessage.success('回答正确！完成记录已保存，结束实验后生成评分'); flag.value = '' } else ElMessage.warning('Flag 不正确，再检查一下实验结果。') } catch {} finally { busy.value = false }
 }
 onMounted(() => { refresh(); timer = setInterval(() => { now.value = Date.now() }, 1000) })
 onBeforeUnmount(() => { disposed = true; clearInterval(timer); clearTimeout(poll); if (expanded.value) document.body.style.overflow = previousOverflow })

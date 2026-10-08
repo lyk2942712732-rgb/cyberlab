@@ -7,7 +7,13 @@ import { date } from '../types'
 interface Item { text: string; evidence_ids: string[] }
 interface Stage extends Item { title: string; kind?: string }
 interface Criterion extends Item { key: string; verdict: string }
+interface Scoring {
+  status: string; score: number | null; baseline: number | null; band: string; label?: string
+  adjustment: number; reason: string; evidence_ids: string[]; adjustment_reason: string; adjustment_evidence_ids: string[]
+  rubric: { key: string; label: string; min: number; max: number; baseline: number; description: string }[]
+}
 interface Report {
+  scoring?: Scoring
   schema_version?: number; summary: string; path?: Stage[]; reasoning?: Item; criteria: Criterion[]
   suggestions?: Item[]; limitations: string[]
   approach?: Stage[]; improvements?: Item[]; next_steps?: string[]
@@ -24,11 +30,11 @@ const result = ref<Assessment>(), loading = ref(false), unavailable = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined, generation = 0, disposed = false
 const names: Record<string, string> = { strategy: '排查与调整', method: '解题方法', verification: '结果验证', understanding: '原理解释' }
 const verdicts: Record<string, string> = { achieved: '已体现', partial: '部分体现', needs_work: '有待改进', insufficient_evidence: '暂无法判断' }
-const legacy = computed(() => !!result.value?.report && result.value.report.schema_version !== 2)
+const legacy = computed(() => !!result.value?.report && (result.value.report.schema_version || 1) < 3)
 const report = computed(() => {
   const source = result.value?.report
   if (!source) return null
-  if (!legacy.value) return { ...source, path: source.path || [], reasoning: source.reasoning!, suggestions: source.suggestions || [] }
+  if ((source.schema_version || 1) >= 2) return { ...source, path: source.path || [], reasoning: source.reasoning!, suggestions: source.suggestions || [] }
   const inferred = (source.approach || []).filter(item => item.kind === 'inferred')
   return {
     ...source,
@@ -69,11 +75,23 @@ function evidenceText(id: string) {
 <template>
 <section class="panel assessment-panel" aria-label="实验复盘与反馈">
   <h2>实验复盘与反馈</h2>
-  <p class="muted small">根据本次操作记录与参考解答生成，帮助你理解解题过程。分项评价不改变 Flag 成绩。</p>
+  <p class="muted small">根据本次操作记录与参考解答生成，帮助你理解解题过程。按完成程度确定基准分，再根据操作依据小幅调整。</p>
   <p v-if="!ended()" class="muted">结束实验后，这里会自动生成你的复盘。</p>
   <template v-else-if="report && result?.status === 'COMPLETED'">
+    <section v-if="report.scoring" class="assessment-grade" aria-label="本次实验评分">
+      <div class="grade-heading">
+        <div><span class="muted small">本次实验评分</span><div class="grade-number">{{ report.scoring.score ?? '暂不评分' }}<small v-if="report.scoring.score !== null"> / 100</small></div></div>
+        <div v-if="report.scoring.score !== null"><strong>{{ report.scoring.label }}</strong><p class="small muted">基准 {{ report.scoring.baseline }} {{ report.scoring.adjustment < 0 ? '−' : '+' }} {{ Math.abs(report.scoring.adjustment) }} = {{ report.scoring.score }} 分</p></div>
+      </div>
+      <p>{{ report.scoring.reason }} <el-button v-if="report.scoring.evidence_ids.length" link type="primary" @click="selected = report.scoring.evidence_ids">查看完成依据</el-button></p>
+      <p v-if="report.scoring.score !== null">{{ report.scoring.adjustment_reason }} <el-button v-if="report.scoring.adjustment_evidence_ids.length" link type="primary" @click="selected = report.scoring.adjustment_evidence_ids">查看浮动依据</el-button></p>
+      <details class="grade-rubric"><summary>查看评分基准</summary>
+        <p class="small muted">每档基准分最多上下浮动 5 分，不跨出所属分段。正常试错、未提供原理说明不会直接扣分；记录不足时暂不评分，不计为 0 分。</p>
+        <div class="rubric-scroll"><table><thead><tr><th>完成程度</th><th>分段</th><th>基准</th><th>判断依据</th></tr></thead><tbody><tr v-for="row in report.scoring.rubric" :key="row.key" :class="{ current: row.key === report.scoring.band }"><th scope="row">{{ row.label }}</th><td>{{ row.min }}–{{ row.max }}</td><td>{{ row.baseline }}</td><td>{{ row.description }}</td></tr></tbody></table></div>
+      </details>
+    </section>
     <p class="assessment-summary">{{ report.summary }}</p>
-    <div v-if="legacy && result.enabled" class="legacy-note"><span>这份历史报告可更新为精简版，补充连贯的思路推断。</span><el-button link type="primary" :loading="loading" @click="request">更新报告</el-button></div>
+    <div v-if="legacy && result.enabled" class="legacy-note"><span>这份历史报告尚无基准评分，更新后可查看本次分数。</span><el-button link type="primary" :loading="loading" @click="request">更新报告</el-button></div>
     <details class="journey" open>
       <summary class="journey-toggle"><h3>操作路径与可能思路</h3><span class="journey-chevron" aria-hidden="true">⌄</span></summary>
       <div class="journey-layout">
@@ -112,6 +130,16 @@ function evidenceText(id: string) {
 </template>
 
 <style scoped>
+.assessment-grade { margin-top: 22px; padding: 20px; border: 1px solid var(--accent-line); border-radius: 10px; background: var(--surface-2); }
+.grade-heading { display: flex; align-items: center; gap: 32px; flex-wrap: wrap; }
+.grade-number { font-size: 34px; font-weight: 650; color: var(--accent); margin-top: 6px; }
+.grade-number small { font-size: 14px; color: var(--muted); font-weight: 400; }
+.grade-rubric summary { cursor: pointer; color: var(--accent); }
+.rubric-scroll { overflow-x: auto; }
+.grade-rubric table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+.grade-rubric th, .grade-rubric td { padding: 12px 10px; border-bottom: 1px solid var(--rule); }
+.grade-rubric th, .grade-rubric td:nth-child(2), .grade-rubric td:nth-child(3) { white-space: nowrap; }
+.grade-rubric .current { background: var(--surface); color: var(--accent); }
 .assessment-panel { margin-top: 24px; container-type: inline-size; }
 .assessment-panel p, .assessment-panel li { line-height: 1.85; overflow-wrap: anywhere; }
 .assessment-panel h3 { font-size: 15px; margin: 26px 0 14px; }

@@ -64,7 +64,7 @@
 
 建立同源 WebSocket，首帧发送 `{"ticket":"<short_lived_jwt>"}`；收到 `{"ready":true}` 后交给 noVNC。票据不写入 URL，不能代替普通 API access token。票据在握手时检查过期，已经建立的连接受 Session TTL/状态/代次实时约束。
 
-Flag 响应为 `{"data":{"correct":true,"score":100,"submission_id":"..."}}` 或 `correct=false, score=0`，不会返回正确答案或回显提交字符串。
+Flag 响应为 `{"data":{"correct":true,"score":100,"submission_id":"..."}}` 或 `correct=false, score=0`，不会返回正确答案或回显提交字符串。这里的 `score` 是原始 Flag 判题值；实验评估成绩在结束实验后生成，通过 `/me/scores` 的 nullable `score` 获取，`score_session_id` 指向最高分报告，`flag_score` 保留原始完成判题值。
 
 ## 教学管理
 

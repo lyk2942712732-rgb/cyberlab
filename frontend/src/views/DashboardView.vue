@@ -11,7 +11,7 @@ const auth = useAuth(), busy = ref(true), failed = ref(false)
 const admin = computed(() => auth.user?.role === 'ADMIN')
 const stats = ref<Record<string, number>>({}), courses = ref<Course[]>([]), sessions = ref<LabSession[]>([]), scores = ref<Score[]>([]), progress = ref<Progress[]>([])
 const completed = computed(() => new Set(progress.value.filter(p => p.completed).map(p => p.lesson_id)))
-const average = computed(() => { const rows = scores.value.filter(s => s.attempted); return rows.length ? Math.round(rows.reduce((a, b) => a + b.score, 0) / rows.length) : 0 })
+const average = computed(() => { const rows = scores.value.filter(s => s.score != null); return rows.length ? Math.round(rows.reduce((a, b) => a + (b.score ?? 0), 0) / rows.length) : '—' })
 const cards = computed(() => admin.value ? [
   { label: '学生人数', value: stats.value.students || 0, note: '已注册学生', icon: Reading },
   { label: '已发布课程', value: stats.value.published_courses || 0, note: '理论学习内容', icon: Reading },
@@ -22,7 +22,7 @@ const cards = computed(() => admin.value ? [
   { label: '当前课程', value: courses.value.length, note: '构建你的知识体系', icon: Reading },
   { label: '已学课时', value: completed.value.size, note: '每一步，都有积累', icon: Finished },
   { label: '已完成实验', value: scores.value.filter(s => s.completed).length, note: '让知识经得起验证', icon: Monitor },
-  { label: '平均成绩', value: average.value, note: '按已尝试实验统计', icon: Trophy },
+  { label: '平均成绩', value: average.value, note: '按已评分实验的最高分统计', icon: Trophy },
 ])
 const nextCourse = computed(() => courses.value.find(c => percent(c) > 0 && percent(c) < 100) || courses.value.find(c => percent(c) < 100) || courses.value[0])
 const today = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())

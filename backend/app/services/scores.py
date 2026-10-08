@@ -1,7 +1,8 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from app.core.db import aware, utcnow
-from app.models import Chapter, Course, LabSession, LabTemplate, LearningProgress, Lesson, Submission, User, ACTIVE_STATUSES
+from app.models import Chapter, Course, LabAssessment, LabSession, LabTemplate, LearningProgress, Lesson, Submission, User, ACTIVE_STATUSES
+from app.grading import published_score
 from app.repositories.catalog import Repository, public
 
 
@@ -14,6 +15,15 @@ class ScoreService:
         submissions = self.repo.list(Submission, Submission.user_id == user_id, order=Submission.created_at)
         sessions = self.repo.list(LabSession, LabSession.user_id == user_id)
         lab_ids = {s.lab_template_id for s in sessions}
+        grades = {}
+        rows = self.db.execute(select(LabSession.lab_template_id, LabAssessment)
+            .join(LabAssessment, LabAssessment.session_id == LabSession.id)
+            .where(LabSession.user_id == user_id, LabAssessment.status == "COMPLETED")
+            .order_by(LabAssessment.completed_at))
+        for lab_id, job in rows:
+            score = published_score(job.report)
+            if score is not None and (lab_id not in grades or score > grades[lab_id][0]):
+                grades[lab_id] = (score, job.session_id)
         labs = self.repo.list(LabTemplate)
         result = []
         for lab in labs:
@@ -21,16 +31,16 @@ class ScoreService:
                 continue
             attempts = [s for s in submissions if s.lab_template_id == lab.id]
             correct = next((s for s in attempts if s.correct), None)
-            result.append({"lab_id": lab.id, "lab_name": lab.name, "score": 100 if correct else 0, "completed": bool(correct), "completed_at": correct.created_at if correct else None, "submissions_count": len(attempts), "attempted": lab.id in lab_ids})
+            result.append({"lab_id": lab.id, "lab_name": lab.name, "score": grades.get(lab.id, (None, None))[0], "score_session_id": grades.get(lab.id, (None, None))[1], "flag_score": 100 if correct else 0, "completed": bool(correct), "completed_at": correct.created_at if correct else None, "submissions_count": len(attempts), "attempted": lab.id in lab_ids})
         return result
 
     def students(self) -> list[dict]:
         result = []
         for user in self.repo.list(User, User.role == "STUDENT", order=User.created_at.desc()):
             scores = self.scores(user.id)
-            attempted = [s for s in scores if s["attempted"]]
+            graded = [s for s in scores if s["score"] is not None]
             completed = [s for s in scores if s["completed"]]
-            result.append({**public(user), "completed_labs": len(completed), "average_score": round(sum(s["score"] for s in attempted) / len(attempted), 1) if attempted else 0, "last_completed_at": max((s["completed_at"] for s in completed), default=None)})
+            result.append({**public(user), "completed_labs": len(completed), "average_score": round(sum(s["score"] for s in graded) / len(graded), 1) if graded else None, "last_completed_at": max((s["completed_at"] for s in completed), default=None)})
         return result
 
     def student(self, identifier: str) -> dict:

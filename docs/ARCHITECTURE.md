@@ -19,7 +19,7 @@ erDiagram
 
 `TargetImage` 是 Docker Engine 中的持久资产引用；`LabTemplate` 保存教学配置和显式 `target_port`；`LabSession` 是一次学生操作；`LabInstance` 记录 Kali/Target 运行实例。镜像没有教学属性，每个学生只创建容器，不复制镜像。
 
-`submissions` 保存每次答案、正误、得分和时间；成绩、首次完成时间和提交次数从原始记录聚合，避免另建成绩表造成双写不一致。学生 API 从不序列化 `flag`、`submitted_flag`、`password_hash`、`upload_path`。
+`submissions` 保存每次答案、正误、原始判题分和时间；完成状态、首次完成时间和提交次数从原始记录聚合。实验成绩取 `lab_assessments.report.scoring` 的最高有效评分，未评分返回 null，平均分只包含已有评分的实验。量表快照与有界浮动一起保存在报告 JSON，无需另建成绩表。学生 API 从不序列化 `flag`、`submitted_flag`、`password_hash`、`upload_path`。
 
 ## 状态与并发
 

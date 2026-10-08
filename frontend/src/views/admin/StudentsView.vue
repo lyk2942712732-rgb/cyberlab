@@ -13,7 +13,7 @@ onMounted(async () => { try { students.value = await get<StudentStats[]>('/admin
 <div class="page-heading">
 <div>
 <h1>学生成绩</h1>
-<p class="muted">了解实验完成情况与理论学习进度。</p>
+<p class="muted">平均成绩按已评分实验的最高分统计，暂未评分不计入。</p>
 </div>
 <span class="count-pill">{{ students.length }} 名学生</span>
 </div>
@@ -24,7 +24,7 @@ onMounted(async () => { try { students.value = await get<StudentStats[]>('/admin
 </el-table-column>
 <el-table-column prop="student_number" label="学号" min-width="150"/>
 <el-table-column prop="completed_labs" label="完成实验" width="110"/>
-<el-table-column prop="average_score" label="平均成绩" width="110"/>
+<el-table-column label="平均成绩" width="110"><template #default="{ row }">{{ row.average_score ?? '—' }}</template></el-table-column>
 <el-table-column label="最近完成时间" min-width="180">
 <template #default="{ row }">{{ date(row.last_completed_at) }}</template>
 </el-table-column>
@@ -48,7 +48,7 @@ onMounted(async () => { try { students.value = await get<StudentStats[]>('/admin
 <el-tag :type="row.completed ? 'success' : 'info'">{{ row.completed ? '已完成' : '未完成' }}</el-tag>
 </template>
 </el-table-column>
-<el-table-column prop="score" label="分数" width="80"/>
+<el-table-column label="最高分" width="110"><template #default="{ row }">{{ row.score ?? '暂未评分' }}</template></el-table-column>
 <el-table-column prop="submissions_count" label="提交次数" width="100"/>
 <el-table-column label="完成时间" min-width="180">
 <template #default="{ row }">{{ date(row.completed_at) }}</template>

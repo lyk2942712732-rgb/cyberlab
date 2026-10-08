@@ -4,7 +4,7 @@ import { get } from '../../api/http'
 import type { Score } from '../../types'
 import { date } from '../../types'
 const scores = ref<Score[]>([]), busy = ref(true)
-const history = ref<{ session_id: string; lab_name: string; status: string; started_at: string }[]>([])
+const history = ref<{ session_id: string; lab_name: string; status: string; score: number | null; started_at: string }[]>([])
 const statusText: Record<string, string> = { NOT_REQUESTED: '尚未生成', QUEUED: '排队中', RUNNING: '生成中', COMPLETED: '已完成', FAILED: '可重试' }
 onMounted(async () => { try { [scores.value, history.value] = await Promise.all([get<Score[]>('/me/scores'), get<typeof history.value>('/me/assessments')]) } catch {} finally { busy.value = false } })
 </script>
@@ -13,7 +13,7 @@ onMounted(async () => { try { [scores.value, history.value] = await Promise.all(
 <div class="page-heading">
 <div>
 <h1>我的成绩</h1>
-<p class="muted">记录每一次尝试，看见自己的成长。</p>
+<p class="muted">成绩取同一实验已评分记录的最高分；暂未评分不计入平均成绩。完成状态由 Flag 判题确认。</p>
 </div>
 <span class="count-pill">已完成 {{ scores.filter(s => s.completed).length }} 个实验</span>
 </div>
@@ -25,7 +25,7 @@ onMounted(async () => { try { [scores.value, history.value] = await Promise.all(
 <el-tag :type="row.completed ? 'success' : 'info'" round>{{ row.completed ? '已完成' : row.attempted ? '进行中 / 未完成' : '未开始' }}</el-tag>
 </template>
 </el-table-column>
-<el-table-column prop="score" label="成绩" width="100"/>
+<el-table-column label="最高成绩" min-width="110"><template #default="{ row }"><router-link v-if="row.score_session_id" :to="`/sessions/${row.score_session_id}`">{{ row.score }} 分</router-link><span v-else>{{ row.attempted ? '暂未评分' : '—' }}</span></template></el-table-column>
 <el-table-column prop="submissions_count" label="提交次数" width="100"/>
 <el-table-column label="完成时间" min-width="190">
 <template #default="{ row }">{{ date(row.completed_at) }}</template>
@@ -43,6 +43,7 @@ onMounted(async () => { try { [scores.value, history.value] = await Promise.all(
 <el-table :data="history" empty-text="还没有已结束的实验">
 <el-table-column prop="lab_name" label="实验" min-width="220"/>
 <el-table-column label="开始时间" min-width="190"><template #default="{ row }">{{ date(row.started_at) }}</template></el-table-column>
+<el-table-column label="本次分数" width="110"><template #default="{ row }">{{ row.score == null ? '暂未评分' : `${row.score} 分` }}</template></el-table-column>
 <el-table-column label="复盘状态" width="110"><template #default="{ row }">{{ statusText[row.status] || row.status }}</template></el-table-column>
 <el-table-column width="120"><template #default="{ row }"><router-link :to="`/sessions/${row.session_id}`">查看实验复盘</router-link></template></el-table-column>
 </el-table>

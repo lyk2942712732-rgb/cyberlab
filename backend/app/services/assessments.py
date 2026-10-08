@@ -2,6 +2,7 @@
 from fastapi import HTTPException
 from sqlalchemy import select
 from app.assessment import REPORT_VERSION
+from app.grading import published_score
 from app.core.config import settings
 from app.core.db import utcnow
 from app.models import LabAssessment, LabSession, LabTemplate
@@ -29,7 +30,8 @@ def describe(job, session, detailed=False):
               "status": job.status if job else "NOT_REQUESTED", "session_status": session.status,
               "enabled": settings().assessment_enabled, "created_at": job.created_at if job else None,
               "completed_at": job.completed_at if job else None, "error": job.error if job else None,
-              "model": job.model if job else None}
+              "model": job.model if job else None,
+              "score": published_score(job.report) if job and job.status == "COMPLETED" else None}
     if detailed:
         result["report"] = job.report if job else None
         result["evidence"] = job.evidence if job and job.status == "COMPLETED" else None

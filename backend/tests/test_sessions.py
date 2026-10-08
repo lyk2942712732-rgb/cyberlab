@@ -157,7 +157,7 @@ def test_every_flag_attempt_is_recorded_and_score_cannot_regress(client, headers
         assert response.status_code == 200
         assert response.json()["data"]["correct"] is expected
     score = client.get("/api/me/scores", headers=headers["student01"]).json()["data"][0]
-    assert score["score"] == 100 and score["submissions_count"] == 3 and score["completed_at"]
+    assert score["score"] is None and score["flag_score"] == 100 and score["completed"] and score["submissions_count"] == 3 and score["completed_at"]
     assert len(list(db.scalars(select(Submission)))) == 3
 
 

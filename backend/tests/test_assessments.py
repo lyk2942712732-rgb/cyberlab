@@ -19,7 +19,8 @@ from tests.test_sessions import start_ready
 
 
 def report():
-    return {"schema_version": 2, "summary": "你尝试了修改输入，实际结果尚无法确认。",
+    return {"schema_version": 3, "scoring": {"band": "unscored", "reason": "尚无充分记录。", "evidence_ids": [],
+            "adjustment": 0, "adjustment_reason": "暂不评分。", "adjustment_evidence_ids": [], "adjustment_basis": "none"}, "summary": "你尝试了修改输入，实际结果尚无法确认。",
             "path": [{"title": "调整输入", "text": "你修改了输入。", "evidence_ids": ["g1:e1"]}],
             "reasoning": {"text": "从修改输入看，你可能在尝试改变查询边界。", "evidence_ids": ["g1:e1"]},
             "criteria": [{"key": key, "verdict": "insufficient_evidence", "text": "需要对应结果。", "evidence_ids": []}
